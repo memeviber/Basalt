@@ -1735,22 +1735,39 @@ func gen_stmt(id: int): void {
     code_emit(C_PUNCT, 12);
     code_emit(C_NEWLINE, 0);
   } else if k == N_RETURN then {
+    if emit_defer_count > 0 then code_emit(C_PUNCT, 13);
     gen_emit_all_defers();
     code_emit(C_KW, 5);
     if node_a[id] != 0 then gen_expr(node_a[id]);
     code_emit(C_PUNCT, 12);
     code_emit(C_NEWLINE, 0);
+    if emit_defer_count > 0 then code_emit(C_PUNCT, 14);
   } else if k == N_BREAK then {
-    if emit_loop_depth > 0 then gen_emit_defer_from(emit_loop_base[emit_loop_depth - 1]);
-    code_emit(C_KW, 9);
-    code_emit(C_PUNCT, 12);
-    code_emit(C_NEWLINE, 0);
+    if emit_loop_depth > 0 then {
+      code_emit(C_PUNCT, 13);
+      gen_emit_defer_from(emit_loop_base[emit_loop_depth - 1]);
+      code_emit(C_KW, 9);
+      code_emit(C_PUNCT, 12);
+      code_emit(C_NEWLINE, 0);
+      code_emit(C_PUNCT, 14);
+    } else {
+      code_emit(C_KW, 9);
+      code_emit(C_PUNCT, 12);
+      code_emit(C_NEWLINE, 0);
+    }
   } else if k == N_CONTINUE then {
-    if emit_loop_depth > 0 then gen_emit_defer_from(emit_loop_base[emit_loop_depth - 1]);
-    if emit_for_step != 0 then gen_stmt(emit_for_step);
-    code_emit(C_KW, 10);
-    code_emit(C_PUNCT, 12);
-    code_emit(C_NEWLINE, 0);
+    if emit_loop_depth > 0 then {
+      code_emit(C_PUNCT, 13);
+      gen_emit_defer_from(emit_loop_base[emit_loop_depth - 1]);
+      code_emit(C_KW, 10);
+      code_emit(C_PUNCT, 12);
+      code_emit(C_NEWLINE, 0);
+      code_emit(C_PUNCT, 14);
+    } else {
+      code_emit(C_KW, 10);
+      code_emit(C_PUNCT, 12);
+      code_emit(C_NEWLINE, 0);
+    }
   } else if k == N_BLOCK then {
     code_emit(C_PUNCT, 13);
     ensure_emit_scope(emit_scope_depth);
@@ -1943,15 +1960,18 @@ func gen_match_stmt(id: int): void {
   code_emit(C_PUNCT, 12);
   code_emit(C_NEWLINE, 0);
   let arm: int = node_b[id];
+  let branch_started: int = 0;
   while arm != 0 {
     if node_value[arm] == 0 then {
       code_emit(C_KW, 7);
       code_emit(C_PUNCT, 13);
       gen_stmt(node_b[arm]);
       code_emit(C_PUNCT, 14);
+      branch_started = 1;
     } else {
       let variant: int = tc_match_variant_member(enum_decl, node_value[arm]);
       if variant != 0 then {
+      if branch_started == 1 then code_emit(C_KW, 7);
       code_emit(C_KW, 6);
       code_emit(C_PUNCT, 4);
       code_emit(C_IDENT, temp);
@@ -1967,11 +1987,12 @@ func gen_match_stmt(id: int): void {
         gen_match_binding(temp, variant, binding, field);
         field = node_next[field]; binding = node_next[binding];
       }
-      gen_stmt(node_b[arm]);
-      code_emit(C_PUNCT, 14);
-      }
-    }
-    arm = node_next[arm];
+       gen_stmt(node_b[arm]);
+       code_emit(C_PUNCT, 14);
+       branch_started = 1;
+       }
+     }
+     arm = node_next[arm];
   }
 }
 
@@ -3271,11 +3292,6 @@ func ast_stmt(): int {
   }
   if input_take(T_CONTINUE) == 1 then {
     if input_take(T_SEMI) == 0 then return (0 - 1);
-    if for_step_context != 0 then {
-      let s: int = clone_for_step(for_step_context);
-      let c: int = ast_node(N_CONTINUE, 0, 0, 0, 0, 0);
-      return ast_node(N_BLOCK, ast_link(s, c), 0, 0, 0, 0);
-    }
     return ast_node(N_CONTINUE, 0, 0, 0, 0, 0);
   }
   if input_take(T_LET) == 1 then {
@@ -7632,6 +7648,7 @@ func tc_stmt(id: int, expected_kind: int, expected_name: int): void {
 
   } else if k == N_IF then {
     tc_expr(node_a[id]); if tc_is_numeric_kind(tc_kind) == 0 && tc_kind != TY_PTR && tc_kind != TY_FUN then tc_fail(25);
+    if node_kind[node_b[id]] == N_DEFER || node_kind[node_c[id]] == N_DEFER then tc_fail(77);
     tc_flow_save_base();
     tc_stmt(node_b[id], expected_kind, expected_name);
     tc_flow_save_yes();
@@ -7773,6 +7790,7 @@ func tc_print_hint(code: int): void {
   else if code == 74 then runtime_write_string("default match arm must appear once and last");
   else if code == 75 then runtime_write_string("do not move an owned value from a loop-carried binding");
   else if code == 76 then runtime_write_string("explicit generic arguments must match a generic function's parameters");
+  else if code == 77 then runtime_write_string("put defer inside a block-scoped statement body");
   else if code == 72 then runtime_write_string("reference return escapes its owner");
   else if code == 73 then runtime_write_string("function-pointer target is unknown for an ownership-sensitive signature");
   else runtime_write_string("inspect the expression at the reported source location");
@@ -7826,6 +7844,7 @@ func tc_diag(): void {
   else if tc_error_code == 74 then runtime_write_string("type error: default match arm must appear once and last");
   else if tc_error_code == 75 then runtime_write_string("type error: owned value move is not allowed inside a loop");
   else if tc_error_code == 76 then runtime_write_string("type error: explicit generic arguments do not match the function parameters");
+  else if tc_error_code == 77 then runtime_write_string("type error: defer must be inside a block-scoped statement body");
   else if tc_error_code == 72 then runtime_write_string("type error: reference return escapes its owner");
   else if tc_error_code == 73 then runtime_write_string("type error: function-pointer target is unknown for an ownership-sensitive signature");
   else if tc_error_code == 44 then runtime_write_string("type error: distinct functions collide after C mangling");

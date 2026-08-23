@@ -1,0 +1,21 @@
+let cleanup_count: int = 0;
+
+func mark(value: int): void {
+  cleanup_count = cleanup_count + value;
+}
+
+func choose(value: int): int {
+  defer mark(1);
+  if value == 0 then return 10;
+  else return 20;
+}
+
+func main(): int {
+  let first: int = choose(0);
+  if first != 10 then return 1;
+  if cleanup_count != 1 then return 2;
+  let second: int = choose(1);
+  if second != 20 then return 3;
+  if cleanup_count != 2 then return 4;
+  return 0;
+}

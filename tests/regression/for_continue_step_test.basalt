@@ -1,0 +1,11 @@
+func main(): int {
+  let i: int = 0;
+  let visits: int = 0;
+  for (i = 0; i < 3; i = i + 1) {
+    visits = visits + 1;
+    if visits < 3 then continue;
+  }
+  if i != 3 then return 1;
+  if visits != 3 then return 2;
+  return 0;
+}

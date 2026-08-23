@@ -1,0 +1,22 @@
+let cleanup_count: int = 0;
+
+func mark(value: int): void {
+  cleanup_count = cleanup_count + value;
+}
+
+func main(): int {
+  let i: int = 0;
+  for (i = 0; i < 2; i = i + 1) {
+    defer mark(1);
+    if i == 0 then continue;
+  }
+  if cleanup_count != 2 then return 1;
+
+  cleanup_count = 0;
+  for (i = 0; i < 3; i = i + 1) {
+    defer mark(1);
+    if i == 0 then break;
+  }
+  if cleanup_count != 1 then return 2;
+  return 0;
+}

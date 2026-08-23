@@ -277,8 +277,14 @@ check_windows_process_compile
 auto_compile_cli
 compile_run "$ROOT/tests/regression/tagged_union_test.basalt" tagged_union_test
 compile_run "$ROOT/tests/regression/defer_test.basalt" defer_test
+compile_run "$ROOT/tests/regression/defer_loop_control_test.basalt" defer_loop_control_test
+compile_run "$ROOT/tests/regression/defer_return_if_test.basalt" defer_return_if_test
+expect_reject "$ROOT/tests/regression/defer_single_statement_invalid.basalt" defer_single_statement_invalid
+grep -Fq 'diagnostic.code=77' "$OUT/defer_single_statement_invalid.boot.log"
 compile_run "$ROOT/tests/regression/match_test.basalt" match_test
 compile_run "$ROOT/tests/regression/match_default_test.basalt" match_default_test
+compile_run "$ROOT/tests/regression/match_default_chain_test.basalt" match_default_chain_test
+compile_run "$ROOT/tests/regression/for_continue_step_test.basalt" for_continue_step_test
 compile_run "$ROOT/tests/regression/tuple_test.basalt" tuple_test
 compile_run "$ROOT/tests/regression/const_array_dimension_test.basalt" const_array_dimension_test
 compile_run "$ROOT/tests/regression/concurrency_test.basalt" concurrency_test

@@ -1,0 +1,28 @@
+enum Color {
+  Red,
+  Green,
+  Blue
+};
+
+func classify(color: Color): int {
+  let result: int = 0;
+  match color {
+    Red => {
+      result = 1;
+    }
+    Green => {
+      result = 2;
+    }
+    _ => {
+      result = 9;
+    }
+  }
+  return result;
+}
+
+func main(): int {
+  if classify(Color::Red()) != 1 then return 1;
+  if classify(Color::Green()) != 2 then return 2;
+  if classify(Color::Blue()) != 9 then return 3;
+  return 0;
+}
