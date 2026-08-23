@@ -1,0 +1,26 @@
+enum Color {
+  Red,
+  Green
+};
+
+let cleanup_count: int = 0;
+
+func mark(value: int): void {
+  cleanup_count = cleanup_count + value;
+}
+
+func choose(color: Color): int {
+  match color {
+    Red => defer mark(1);
+    Green => defer mark(10);
+  }
+  return 7;
+}
+
+func main(): int {
+  if choose(Color::Red()) != 7 then return 1;
+  if cleanup_count != 1 then return 2;
+  if choose(Color::Green()) != 7 then return 3;
+  if cleanup_count != 11 then return 4;
+  return 0;
+}

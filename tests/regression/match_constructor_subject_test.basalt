@@ -1,0 +1,18 @@
+enum Color {
+  Red,
+  Green
+};
+
+func main(): int {
+  let visits: int = 0;
+  match Color::Red() {
+    Red => {
+      visits = visits + 1;
+    }
+    Green => {
+      visits = visits + 10;
+    }
+  }
+  if visits != 1 then return 1;
+  return 0;
+}

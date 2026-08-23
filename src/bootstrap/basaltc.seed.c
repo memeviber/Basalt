@@ -2651,7 +2651,7 @@ int ast_link(int head, int item) {
       node_pos[copy] = node_pos[item];
       node_scope[copy] = node_scope[item];
       item = copy;
-      break;
+      { break; }
     } else {
     }
     p = node_next[p];
@@ -5059,6 +5059,10 @@ void gen_stmt(int id) {
     (void)(code_emit(C_PUNCT, 12));
     (void)(code_emit(C_NEWLINE, 0));
   } else if (k == N_RETURN) {
+    if (emit_defer_count > 0)
+      (void)(code_emit(C_PUNCT, 13));
+    else {
+    }
     (void)(gen_emit_all_defers());
     (void)(code_emit(C_KW, 5));
     if (node_a[id] != 0)
@@ -5067,26 +5071,36 @@ void gen_stmt(int id) {
     }
     (void)(code_emit(C_PUNCT, 12));
     (void)(code_emit(C_NEWLINE, 0));
+    if (emit_defer_count > 0)
+      (void)(code_emit(C_PUNCT, 14));
+    else {
+    }
   } else if (k == N_BREAK) {
-    if (emit_loop_depth > 0)
+    if (emit_loop_depth > 0) {
+      (void)(code_emit(C_PUNCT, 13));
       (void)(gen_emit_defer_from(emit_loop_base[(emit_loop_depth - 1)]));
-    else {
+      (void)(code_emit(C_KW, 9));
+      (void)(code_emit(C_PUNCT, 12));
+      (void)(code_emit(C_NEWLINE, 0));
+      (void)(code_emit(C_PUNCT, 14));
+    } else {
+      (void)(code_emit(C_KW, 9));
+      (void)(code_emit(C_PUNCT, 12));
+      (void)(code_emit(C_NEWLINE, 0));
     }
-    (void)(code_emit(C_KW, 9));
-    (void)(code_emit(C_PUNCT, 12));
-    (void)(code_emit(C_NEWLINE, 0));
   } else if (k == N_CONTINUE) {
-    if (emit_loop_depth > 0)
+    if (emit_loop_depth > 0) {
+      (void)(code_emit(C_PUNCT, 13));
       (void)(gen_emit_defer_from(emit_loop_base[(emit_loop_depth - 1)]));
-    else {
+      (void)(code_emit(C_KW, 10));
+      (void)(code_emit(C_PUNCT, 12));
+      (void)(code_emit(C_NEWLINE, 0));
+      (void)(code_emit(C_PUNCT, 14));
+    } else {
+      (void)(code_emit(C_KW, 10));
+      (void)(code_emit(C_PUNCT, 12));
+      (void)(code_emit(C_NEWLINE, 0));
     }
-    if (emit_for_step != 0)
-      (void)(gen_stmt(emit_for_step));
-    else {
-    }
-    (void)(code_emit(C_KW, 10));
-    (void)(code_emit(C_PUNCT, 12));
-    (void)(code_emit(C_NEWLINE, 0));
   } else if (k == N_BLOCK) {
     (void)(code_emit(C_PUNCT, 13));
     (void)(ensure_emit_scope(emit_scope_depth));
@@ -5379,15 +5393,24 @@ void gen_match_stmt(int id) {
   (void)(code_emit(C_PUNCT, 12));
   (void)(code_emit(C_NEWLINE, 0));
   int arm = node_b[id];
+  int branch_started = 0;
   while (arm != 0) {
     if (node_value[arm] == 0) {
       (void)(code_emit(C_KW, 7));
       (void)(code_emit(C_PUNCT, 13));
+      int arm_scope_start = emit_defer_count;
       (void)(gen_stmt(node_b[arm]));
+      (void)(gen_emit_defer_from(arm_scope_start));
+      emit_defer_count = arm_scope_start;
       (void)(code_emit(C_PUNCT, 14));
+      branch_started = 1;
     } else {
       int variant = tc_match_variant_member(enum_decl, node_value[arm]);
       if (variant != 0) {
+        if (branch_started == 1)
+          (void)(code_emit(C_KW, 7));
+        else {
+        }
         (void)(code_emit(C_KW, 6));
         (void)(code_emit(C_PUNCT, 4));
         (void)(code_emit(C_IDENT, temp));
@@ -5410,8 +5433,12 @@ void gen_match_stmt(int id) {
           field = node_next[field];
           binding = node_next[binding];
         }
+        int arm_scope_start = emit_defer_count;
         (void)(gen_stmt(node_b[arm]));
+        (void)(gen_emit_defer_from(arm_scope_start));
+        emit_defer_count = arm_scope_start;
         (void)(code_emit(C_PUNCT, 14));
+        branch_started = 1;
       } else {
       }
     }
@@ -5749,9 +5776,9 @@ void gen_closure_emit_value(int closure_id) {
   int duplicate_value_emit = 0;
   int value_scan_emit = 0;
   while (value_scan_emit < gen_closure_count) {
-    if (gen_closure_node[value_scan_emit] == closure_id)
+    if (gen_closure_node[value_scan_emit] == closure_id) {
       break;
-    else {
+    } else {
     }
     if (gen_closure_value_type_name[value_scan_emit] == value_name_emit)
       duplicate_value_emit = 1;
@@ -6360,8 +6387,9 @@ int ast_generic_params(void) {
     else
       params = ast_link(params, p);
     if (input_take(T_COMMA) == 1) {
-    } else
+    } else {
       break;
+    }
   }
   if (input_take(T_GT) == 0)
     return (0 - 1);
@@ -6546,7 +6574,9 @@ int ast_type(void) {
         }
         items = ast_link(items, item);
         if (input_take(T_COMMA) == 0) {
-          break;
+          {
+            break;
+          }
         } else {
         }
       }
@@ -6850,9 +6880,9 @@ int ast_primary(void) {
             captures = capture;
           else
             captures = ast_link(captures, capture);
-          if (input_take(T_COMMA) == 0)
+          if (input_take(T_COMMA) == 0) {
             break;
-          else {
+          } else {
           }
         }
       } else {
@@ -6954,7 +6984,7 @@ int ast_primary(void) {
             type_arg = ast_type();
             if (type_arg == 0) {
               explicit_args = 0;
-              break;
+              { break; }
             } else {
             }
             explicit_args = ast_link(explicit_args, type_arg);
@@ -7035,7 +7065,9 @@ int ast_primary(void) {
         }
         items = ast_link(items, item);
         if (input_take(T_COMMA) == 0) {
-          break;
+          {
+            break;
+          }
         } else {
         }
       }
@@ -7560,12 +7592,6 @@ int ast_stmt(void) {
       return (0 - 1);
     else {
     }
-    if (for_step_context != 0) {
-      int s = clone_for_step(for_step_context);
-      int c = ast_node(N_CONTINUE, 0, 0, 0, 0, 0);
-      return ast_node(N_BLOCK, ast_link(s, c), 0, 0, 0, 0);
-    } else {
-    }
     return ast_node(N_CONTINUE, 0, 0, 0, 0, 0);
   } else {
   }
@@ -7586,9 +7612,9 @@ int ast_stmt(void) {
         else
           bindings = ast_link(bindings, binding);
         binding_count = (binding_count + 1);
-        if (input_take(T_COMMA) == 0)
+        if (input_take(T_COMMA) == 0) {
           break;
-        else {
+        } else {
         }
         if (input_peek() != T_ID)
           return (0 - 1);
@@ -9505,7 +9531,7 @@ void lexer_skip(void) {
           (void)(source_take());
           (void)(source_take());
           closed = 1;
-          break;
+          { break; }
         } else {
         }
         (void)(source_take());
@@ -15535,6 +15561,10 @@ int tc_emit_arg_type(int id) {
     return tc_result_type;
   } else {
   }
+  if ((node_kind[id] == N_VARIANT) && (node_aux[id] != 0))
+    return gen_substitute_type(node_aux[id]);
+  else {
+  }
   if (node_kind[id] == N_CLOSURE) {
     if (node_aux[id] > 0) {
       int closure_serial_value = (node_aux[id] - 1);
@@ -16072,6 +16102,10 @@ void tc_stmt(int id, int expected_kind, int expected_name) {
       (void)(tc_fail(25));
     else {
     }
+    if ((node_kind[node_b[id]] == N_DEFER) || (node_kind[node_c[id]] == N_DEFER))
+      (void)(tc_fail(77));
+    else {
+    }
     (void)(tc_flow_save_base());
     (void)(tc_stmt(node_b[id], expected_kind, expected_name));
     (void)(tc_flow_save_yes());
@@ -16349,6 +16383,8 @@ void tc_print_hint(int code) {
   else if (code == 76)
     (void)(runtime_write_string(
         "explicit generic arguments must match a generic function's parameters"));
+  else if (code == 77)
+    (void)(runtime_write_string("put defer inside a block-scoped statement body"));
   else if (code == 72)
     (void)(runtime_write_string("reference return escapes its owner"));
   else if (code == 73)
@@ -16456,6 +16492,8 @@ void tc_diag(void) {
   else if (tc_error_code == 76)
     (void)(runtime_write_string(
         "type error: explicit generic arguments do not match the function parameters"));
+  else if (tc_error_code == 77)
+    (void)(runtime_write_string("type error: defer must be inside a block-scoped statement body"));
   else if (tc_error_code == 72)
     (void)(runtime_write_string("type error: reference return escapes its owner"));
   else if (tc_error_code == 73)

@@ -1965,7 +1965,10 @@ func gen_match_stmt(id: int): void {
     if node_value[arm] == 0 then {
       code_emit(C_KW, 7);
       code_emit(C_PUNCT, 13);
+      let arm_scope_start: int = emit_defer_count;
       gen_stmt(node_b[arm]);
+      gen_emit_defer_from(arm_scope_start);
+      emit_defer_count = arm_scope_start;
       code_emit(C_PUNCT, 14);
       branch_started = 1;
     } else {
@@ -1987,7 +1990,10 @@ func gen_match_stmt(id: int): void {
         gen_match_binding(temp, variant, binding, field);
         field = node_next[field]; binding = node_next[binding];
       }
+       let arm_scope_start: int = emit_defer_count;
        gen_stmt(node_b[arm]);
+       gen_emit_defer_from(arm_scope_start);
+       emit_defer_count = arm_scope_start;
        code_emit(C_PUNCT, 14);
        branch_started = 1;
        }
@@ -7389,6 +7395,7 @@ func tc_emit_arg_type(id: int): int {
     tc_expr(id);
     return tc_result_type;
   }
+  if node_kind[id] == N_VARIANT && node_aux[id] != 0 then return gen_substitute_type(node_aux[id]);
   if node_kind[id] == N_CLOSURE then {
     if node_aux[id] > 0 then {
       let closure_serial_value: int = node_aux[id] - 1;

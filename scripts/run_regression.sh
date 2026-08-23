@@ -284,6 +284,8 @@ grep -Fq 'diagnostic.code=77' "$OUT/defer_single_statement_invalid.boot.log"
 compile_run "$ROOT/tests/regression/match_test.basalt" match_test
 compile_run "$ROOT/tests/regression/match_default_test.basalt" match_default_test
 compile_run "$ROOT/tests/regression/match_default_chain_test.basalt" match_default_chain_test
+compile_run "$ROOT/tests/regression/match_arm_defer_test.basalt" match_arm_defer_test
+compile_run "$ROOT/tests/regression/match_constructor_subject_test.basalt" match_constructor_subject_test
 compile_run "$ROOT/tests/regression/for_continue_step_test.basalt" for_continue_step_test
 compile_run "$ROOT/tests/regression/tuple_test.basalt" tuple_test
 compile_run "$ROOT/tests/regression/const_array_dimension_test.basalt" const_array_dimension_test
