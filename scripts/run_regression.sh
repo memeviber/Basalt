@@ -279,6 +279,7 @@ compile_run "$ROOT/tests/regression/tagged_union_test.basalt" tagged_union_test
 compile_run "$ROOT/tests/regression/defer_test.basalt" defer_test
 compile_run "$ROOT/tests/regression/defer_loop_control_test.basalt" defer_loop_control_test
 compile_run "$ROOT/tests/regression/defer_return_if_test.basalt" defer_return_if_test
+compile_run "$ROOT/tests/regression/defer_return_expression_order_test.basalt" defer_return_expression_order_test
 expect_reject "$ROOT/tests/regression/defer_single_statement_invalid.basalt" defer_single_statement_invalid
 grep -Fq 'diagnostic.code=77' "$OUT/defer_single_statement_invalid.boot.log"
 compile_run "$ROOT/tests/regression/match_test.basalt" match_test
@@ -286,6 +287,14 @@ compile_run "$ROOT/tests/regression/match_default_test.basalt" match_default_tes
 compile_run "$ROOT/tests/regression/match_default_chain_test.basalt" match_default_chain_test
 compile_run "$ROOT/tests/regression/match_arm_defer_test.basalt" match_arm_defer_test
 compile_run "$ROOT/tests/regression/match_constructor_subject_test.basalt" match_constructor_subject_test
+compile_run "$ROOT/tests/regression/match_nested_constructor_defer_test.basalt" match_nested_constructor_defer_test
+compile_run "$ROOT/tests/regression/match_nested_loop_defer_test.basalt" match_nested_loop_defer_test
+compile_run "$ROOT/tests/regression/match_branch_move_test.basalt" match_branch_move_test
+compile_run "$ROOT/tests/regression/if_match_and_tuple_branch_test.basalt" if_match_and_tuple_branch_test
+expect_reject "$ROOT/tests/regression/if_declaration_branch_invalid.basalt" if_declaration_branch_invalid
+grep -Fq 'diagnostic.code=78' "$OUT/if_declaration_branch_invalid.boot.log"
+expect_reject "$ROOT/tests/regression/if_tuple_branch_invalid.basalt" if_tuple_branch_invalid
+grep -Fq 'diagnostic.code=78' "$OUT/if_tuple_branch_invalid.boot.log"
 compile_run "$ROOT/tests/regression/for_continue_step_test.basalt" for_continue_step_test
 compile_run "$ROOT/tests/regression/tuple_test.basalt" tuple_test
 compile_run "$ROOT/tests/regression/const_array_dimension_test.basalt" const_array_dimension_test

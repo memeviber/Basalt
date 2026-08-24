@@ -1,0 +1,33 @@
+enum Color {
+  Red,
+  Green
+};
+
+func pair(): (int, int) {
+  return (3, 4);
+}
+
+func main(): int {
+  let result: int = 0;
+  if true then match Color::Red() {
+    Red => {
+      result = 1;
+    }
+    Green => {
+      result = 2;
+    }
+  } else {
+    result = 3;
+  }
+  if result != 1 then return 1;
+
+  result = 0;
+  if true then {
+    let (left, right): (int, int) = pair();
+    result = left + right;
+  } else {
+    result = 9;
+  }
+  if result != 7 then return 2;
+  return 0;
+}

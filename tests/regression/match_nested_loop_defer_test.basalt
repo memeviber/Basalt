@@ -1,0 +1,78 @@
+enum Leaf {
+  Number {
+    value: int;
+  },
+  EmptyLeaf
+};
+
+enum Node {
+  Wrapped {
+    leaf: Leaf;
+  },
+  MissingNode
+};
+
+enum Root {
+  Child {
+    node: Node;
+  },
+  EmptyRoot
+};
+
+let cleanup_count: int = 0;
+
+func mark(value: int): void {
+  cleanup_count = cleanup_count + value;
+}
+
+func inspect(root: Root): int {
+  match root {
+    Child(node) => {
+      defer mark(100);
+      let total: int = 0;
+      let i: int = 0;
+      while i < 2 {
+        match node {
+          Wrapped(leaf) => {
+            match leaf {
+              Number(value) => {
+                defer mark(1);
+                total = total + value;
+              }
+              EmptyLeaf => {
+                defer mark(2);
+              }
+            }
+          }
+          MissingNode => {
+            defer mark(10);
+          }
+        }
+        i = i + 1;
+      }
+      return total;
+    }
+    EmptyRoot => {
+      defer mark(200);
+      return 0;
+    }
+  }
+  return 0;
+}
+
+func main(): int {
+  let number: Root = Root::Child(Node::Wrapped(Leaf::Number(7)));
+  if inspect(number) != 14 then return 1;
+  if cleanup_count != 102 then return 2;
+
+  cleanup_count = 0;
+  let empty: Root = Root::Child(Node::Wrapped(Leaf::EmptyLeaf()));
+  if inspect(empty) != 0 then return 3;
+  if cleanup_count != 104 then return 4;
+
+  cleanup_count = 0;
+  if inspect(Root::EmptyRoot()) != 0 then return 5;
+  if cleanup_count != 200 then return 6;
+
+  return 0;
+}

@@ -1,0 +1,16 @@
+let value: int = 0;
+
+func mark(): void {
+  value = value + 1;
+}
+
+func read_before_cleanup(): int {
+  defer mark();
+  return value;
+}
+
+func main(): int {
+  if read_before_cleanup() != 0 then return 1;
+  if value != 1 then return 2;
+  return 0;
+}

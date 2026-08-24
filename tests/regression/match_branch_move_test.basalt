@@ -1,0 +1,23 @@
+include "../../src/stdlib/array.basalt"
+
+enum Color {
+  Red,
+  Green
+};
+
+func main(): int {
+  let zero: int = 0;
+  let values: array::Array<int> = array::new(1, zero);
+  let color: Color = Color::Red();
+  match color {
+    Red => {
+      let moved: array::Array<int> = move values;
+      array::free(moved);
+    }
+    Green => {
+      let moved: array::Array<int> = move values;
+      array::free(moved);
+    }
+  }
+  return 0;
+}
