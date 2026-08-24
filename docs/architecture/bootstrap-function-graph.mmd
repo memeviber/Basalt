@@ -32,7 +32,8 @@ flowchart LR
     gen_emit_defer_from["gen_emit_defer_from<br/>Emits cleanup from stack baseline<br/>returns void"]
     gen_emit_all_defers["gen_emit_all_defers<br/>Emits function-level cleanup<br/>returns void"]
     code_emit["code_emit<br/>Appends a token to C buffer<br/>returns void; grows buffer"]
-    emit_runtime["emit_runtime<br/>Emits portable C runtime<br/>returns void"]
+    emit_runtime["emit_runtime<br/>Writes portable C runtime text<br/>returns void"]
+    emit_c_file["emit_c_file<br/>Serializes runtime, raw C, and tokens<br/>returns void"]
   end
 
   subgraph Includes["Source loading and recursive include expansion"]
@@ -47,8 +48,10 @@ flowchart LR
     dependency["source_dep_add / source_dep_reaches<br/>dependency graph and cycle detection"]
     allocation["alloc_ints / grow_ints / free_ints<br/>temporary line-buffer ownership"]
     file_io["open_file / read_char / close_file<br/>file-handle I/O"]
+    driver["main / pipeline_main<br/>compiler driver entry boundary"]
   end
 
+  ast_stmt -->|recurses into nested statements| ast_stmt
   ast_stmt -->|parses expressions| ast_expr
   ast_stmt -->|parses annotations| ast_type
   ast_expr -->|delegates precedence| ast_expr_prec
@@ -73,12 +76,17 @@ flowchart LR
   gen_program -->|emits functions| gen_function
   gen_program -->|emits top-level statements| gen_stmt
   gen_program -->|writes tokens| code_emit
-  gen_program -->|writes runtime prelude| emit_runtime
+  driver -->|requests generation| gen_program
+  driver -->|requests C serialization| emit_c_file
+  emit_c_file -->|writes runtime prelude| emit_runtime
+  gen_collect_stmt -->|recurses through statements| gen_collect_stmt
   gen_collect_stmt -->|walks expressions| gen_collect_expr
+  gen_collect_expr -->|recurses through operands| gen_collect_expr
   gen_collect_expr -->|reuses type/ownership metadata| tc_expr
   gen_function -->|emits body| gen_stmt
   gen_function -->|emits function cleanup| gen_emit_defer_from
   gen_function -->|writes signature/body tokens| code_emit
+  gen_stmt -->|recurses through nested statements| gen_stmt
   gen_stmt -->|emits expressions| gen_expr
   gen_stmt -->|registers defer| gen_defer_push
   gen_stmt -->|emits return/branch cleanup| gen_emit_defer_from
@@ -91,6 +99,7 @@ flowchart LR
   gen_match_stmt -->|checks arm termination| gen_stmt_terminates
   gen_match_stmt -->|emits arm cleanup| gen_emit_defer_from
   gen_match_stmt -->|writes match tokens| code_emit
+  gen_expr -->|recurses through operands| gen_expr
   gen_expr -->|writes expression tokens| code_emit
   gen_expr -->|uses type metadata| tc_expr
   gen_emit_all_defers -->|delegates to scoped cleanup| gen_emit_defer_from
@@ -113,8 +122,8 @@ flowchart LR
   classDef external fill:#475569,stroke:#1e293b,color:#fff;
   class ast_stmt,ast_expr,ast_expr_prec,ast_type parser;
   class tc_stmt,tc_expr,tc_consume_call,tc_enter_scope,tc_leave_scope,tc_flow_save_base,tc_flow_save_yes,tc_flow_restore_base,tc_flow_merge_yes,tc_flow_end checker;
-  class gen_program,gen_function,gen_stmt,gen_stmt_terminates,gen_match_stmt,gen_expr,gen_collect_stmt,gen_collect_expr,gen_defer_push,gen_emit_defer_from,gen_emit_all_defers,code_emit,emit_runtime emitter;
+  class gen_program,gen_function,gen_stmt,gen_stmt_terminates,gen_match_stmt,gen_expr,gen_collect_stmt,gen_collect_expr,gen_defer_push,gen_emit_defer_from,gen_emit_all_defers,code_emit,emit_runtime,emit_c_file emitter;
   class include_process_line,include_expand_handle,source_import_fail include;
-  class source_io,include_io,dependency,allocation,file_io external;
+  class source_io,include_io,dependency,allocation,file_io,driver external;
 
   linkStyle default stroke:#64748b,stroke-width:1.2px;
