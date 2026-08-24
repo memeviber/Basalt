@@ -1,0 +1,87 @@
+flowchart TD
+  Seed["src/bootstrap/basaltc.seed.c<br/>frozen seed"]
+  Stage["bootstrap_stage.sh<br/>seed → stage2 → current"]
+  Source["src/bootstrap/basaltc.basalt<br/>Bootstrap compiler"]
+  CLI["CLI / compiler entry"]
+  Include["include expansion<br/>includec / dependency cycle"]
+  Lexer["Lexer<br/>tokens + source positions"]
+  Parser["Parser / AST builder<br/>ast_stmt · ast_expr · ast_type"]
+  AST["AST arena<br/>nodes + linked lists"]
+  TC["Type checker<br/>tc_stmt · tc_expr"]
+  Flow["Flow snapshots<br/>if / while / for / match"]
+  Ownership["Ownership / borrow state<br/>move · borrow · lifetime"]
+  Generic["Generic inference<br/>specialization + mangling"]
+  Collect["Reachability collection<br/>gen_collect_stmt / expr"]
+  Emitter["C emitter<br/>gen_program · gen_function"]
+  Stmt["Statement emission<br/>gen_stmt"]
+  Term["Termination analysis<br/>gen_stmt_terminates"]
+  Match["Match emission<br/>gen_match_stmt"]
+  Defer["Defer stack<br/>push + scoped flush"]
+  Loop["Loop context<br/>for step / loop base"]
+  Buffer["Token/code buffer<br/>code_emit"]
+  Runtime["C runtime prelude<br/>memory · string · FFI · threads"]
+  C["Generated C11"]
+  GCC["GCC / Clang / MinGW"]
+  Binary["Executable / object"]
+
+  Seed --> Stage
+  Stage --> Source
+  Source --> CLI
+  CLI --> Include
+  Include --> Lexer
+  Lexer --> Parser
+  Parser --> AST
+  AST --> TC
+  TC --> Flow
+  TC --> Ownership
+  TC --> Generic
+  AST --> Collect
+  Collect --> Emitter
+  Generic --> Emitter
+  TC --> Emitter
+  Emitter --> Stmt
+  Emitter --> Runtime
+  Stmt --> Term
+  Stmt --> Match
+  Stmt --> Defer
+  Stmt --> Loop
+  Match --> Defer
+  Loop --> Defer
+  Defer --> Buffer
+  Term --> Buffer
+  Match --> Buffer
+  Stmt --> Buffer
+  Runtime --> Buffer
+  Buffer --> C
+  C --> GCC
+  GCC --> Binary
+
+  subgraph ControlFlow["Control-flow / cleanup paths"]
+    Term
+    Match
+    Defer
+    Loop
+  end
+
+  subgraph Frontend["Frontend"]
+    Include
+    Lexer
+    Parser
+    AST
+  end
+
+  subgraph StaticAnalysis["Static analysis"]
+    TC
+    Flow
+    Ownership
+    Generic
+  end
+
+  classDef core fill:#1f2937,stroke:#111827,color:#fff;
+  classDef analysis fill:#374151,stroke:#111827,color:#fff;
+  classDef flow fill:#7c2d12,stroke:#431407,color:#fff;
+  classDef artifact fill:#14532d,stroke:#052e16,color:#fff;
+  class Seed,Stage,Source,CLI,Lexer,Parser,AST,Emitter,Buffer core;
+  class TC,Flow,Ownership,Generic,Collect analysis;
+  class Term,Match,Defer,Loop flow;
+  class C,GCC,Binary,Runtime artifact;
