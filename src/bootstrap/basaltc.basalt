@@ -1638,6 +1638,34 @@ func gen_decl(ty: int, name: int): void {
   }
 }
 
+func gen_stmt_terminates(id: int): int {
+  if id == 0 then return 0;
+  let k: int = node_kind[id];
+  if k == N_RETURN || k == N_BREAK || k == N_CONTINUE then return 1;
+  if k == N_BLOCK then {
+    let item: int = node_a[id];
+    while item != 0 {
+      if gen_stmt_terminates(item) == 1 then return 1;
+      item = node_next[item];
+    }
+    return 0;
+  }
+  if k == N_IF then {
+    if gen_stmt_terminates(node_b[id]) == 1 && gen_stmt_terminates(node_c[id]) == 1 then return 1;
+    return 0;
+  }
+  if k == N_MATCH then {
+    let arm: int = node_b[id];
+    if arm == 0 then return 0;
+    while arm != 0 {
+      if gen_stmt_terminates(node_b[arm]) == 0 then return 0;
+      arm = node_next[arm];
+    }
+    return 1;
+  }
+  return 0;
+}
+
 func gen_stmt(id: int): void {
   gen_source_pos = node_pos[id];
   gen_source_epoch = gen_source_epoch + 1;
@@ -1726,8 +1754,9 @@ func gen_stmt(id: int): void {
   } else if k == N_MATCH then {
     code_emit(C_PUNCT, 13);
     let match_scope_start: int = emit_defer_count;
+    let match_terminates: int = gen_stmt_terminates(id);
     gen_match_stmt(id);
-    gen_emit_defer_from(match_scope_start);
+    if match_terminates == 0 then gen_emit_defer_from(match_scope_start);
     emit_defer_count = match_scope_start;
     code_emit(C_PUNCT, 14);
   } else if k == N_EXPR then {
@@ -1801,6 +1830,7 @@ func gen_stmt(id: int): void {
       code_emit(C_NEWLINE, 0);
     }
   } else if k == N_BLOCK then {
+    let block_terminates: int = gen_stmt_terminates(id);
     code_emit(C_PUNCT, 13);
     ensure_emit_scope(emit_scope_depth);
     emit_scope_start[emit_scope_depth] = emit_defer_count;
@@ -1811,7 +1841,7 @@ func gen_stmt(id: int): void {
       item = node_next[item];
     }
     emit_scope_depth = emit_scope_depth - 1;
-    gen_emit_defer_from(emit_scope_start[emit_scope_depth]);
+    if block_terminates == 0 then gen_emit_defer_from(emit_scope_start[emit_scope_depth]);
     emit_defer_count = emit_scope_start[emit_scope_depth];
     code_emit(C_PUNCT, 14);
   } else if k == N_IF then {
@@ -1820,8 +1850,10 @@ func gen_stmt(id: int): void {
     gen_expr_condition_inner(node_a[id]);
     code_emit(C_PUNCT, 8);
     gen_stmt(node_b[id]);
-    code_emit(C_KW, 7);
-    gen_stmt(node_c[id]);
+    if node_kind[node_c[id]] != N_BLOCK || node_a[node_c[id]] != 0 then {
+      code_emit(C_KW, 7);
+      gen_stmt(node_c[id]);
+    }
   } else if k == N_FOR then {
     code_emit(C_KW, 11);
     code_emit(C_PUNCT, 4);
@@ -1998,8 +2030,9 @@ func gen_match_stmt(id: int): void {
       code_emit(C_KW, 7);
       code_emit(C_PUNCT, 13);
       let arm_scope_start: int = emit_defer_count;
+      let arm_terminates: int = gen_stmt_terminates(node_b[arm]);
       gen_stmt(node_b[arm]);
-      gen_emit_defer_from(arm_scope_start);
+      if arm_terminates == 0 then gen_emit_defer_from(arm_scope_start);
       emit_defer_count = arm_scope_start;
       code_emit(C_PUNCT, 14);
       branch_started = 1;
@@ -2023,8 +2056,9 @@ func gen_match_stmt(id: int): void {
         field = node_next[field]; binding = node_next[binding];
       }
        let arm_scope_start: int = emit_defer_count;
+       let arm_terminates: int = gen_stmt_terminates(node_b[arm]);
        gen_stmt(node_b[arm]);
-       gen_emit_defer_from(arm_scope_start);
+       if arm_terminates == 0 then gen_emit_defer_from(arm_scope_start);
        emit_defer_count = arm_scope_start;
        code_emit(C_PUNCT, 14);
        branch_started = 1;
