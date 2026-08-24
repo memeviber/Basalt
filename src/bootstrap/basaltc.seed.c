@@ -5048,7 +5048,12 @@ void gen_stmt(int id) {
       index = (index + 1);
     }
   } else if (k == N_MATCH) {
+    (void)(code_emit(C_PUNCT, 13));
+    int match_scope_start = emit_defer_count;
     (void)(gen_match_stmt(id));
+    (void)(gen_emit_defer_from(match_scope_start));
+    emit_defer_count = match_scope_start;
+    (void)(code_emit(C_PUNCT, 14));
   } else if (k == N_EXPR) {
     (void)(code_emit(C_PUNCT, 4));
     (void)(code_emit(C_KW, 4));
@@ -5059,21 +5064,51 @@ void gen_stmt(int id) {
     (void)(code_emit(C_PUNCT, 12));
     (void)(code_emit(C_NEWLINE, 0));
   } else if (k == N_RETURN) {
-    if (emit_defer_count > 0)
-      (void)(code_emit(C_PUNCT, 13));
-    else {
-    }
-    (void)(gen_emit_all_defers());
-    (void)(code_emit(C_KW, 5));
-    if (node_a[id] != 0)
-      (void)(gen_expr(node_a[id]));
-    else {
-    }
-    (void)(code_emit(C_PUNCT, 12));
-    (void)(code_emit(C_NEWLINE, 0));
-    if (emit_defer_count > 0)
-      (void)(code_emit(C_PUNCT, 14));
-    else {
+    if ((emit_defer_count > 0) && (node_a[id] != 0)) {
+      int return_type = 0;
+      if (gen_active_function != 0)
+        return_type = gen_substitute_type(node_b[gen_active_function]);
+      else {
+      }
+      if (return_type != 0) {
+        int return_temp = gen_match_temp_symbol();
+        (void)(code_emit(C_PUNCT, 13));
+        (void)(gen_type(node_kind[return_type], return_type, node_value[return_type]));
+        (void)(code_emit(C_IDENT, return_temp));
+        (void)(code_emit(C_PUNCT, 11));
+        (void)(gen_expr(node_a[id]));
+        (void)(code_emit(C_PUNCT, 12));
+        (void)(code_emit(C_NEWLINE, 0));
+        (void)(gen_emit_all_defers());
+        (void)(code_emit(C_KW, 5));
+        (void)(code_emit(C_IDENT, return_temp));
+        (void)(code_emit(C_PUNCT, 12));
+        (void)(code_emit(C_NEWLINE, 0));
+        (void)(code_emit(C_PUNCT, 14));
+      } else {
+        (void)(gen_emit_all_defers());
+        (void)(code_emit(C_KW, 5));
+        (void)(gen_expr(node_a[id]));
+        (void)(code_emit(C_PUNCT, 12));
+        (void)(code_emit(C_NEWLINE, 0));
+      }
+    } else {
+      if (emit_defer_count > 0)
+        (void)(code_emit(C_PUNCT, 13));
+      else {
+      }
+      (void)(gen_emit_all_defers());
+      (void)(code_emit(C_KW, 5));
+      if (node_a[id] != 0)
+        (void)(gen_expr(node_a[id]));
+      else {
+      }
+      (void)(code_emit(C_PUNCT, 12));
+      (void)(code_emit(C_NEWLINE, 0));
+      if (emit_defer_count > 0)
+        (void)(code_emit(C_PUNCT, 14));
+      else {
+      }
     }
   } else if (k == N_BREAK) {
     if (emit_loop_depth > 0) {
@@ -13288,6 +13323,7 @@ int tc_check_variant(int id) {
     return 0;
   else {
   }
+  int variant_enum = tc_variant_enum;
   int arg = node_a[id];
   int field = node_b[tc_variant_member];
   while ((arg != 0) && (field != 0)) {
@@ -13323,10 +13359,10 @@ int tc_check_variant(int id) {
   } else {
   }
   tc_kind = TY_NAMED;
-  tc_name = tc_variant_enum;
+  tc_name = variant_enum;
   tc_elem_kind = 0;
   tc_elem_name = 0;
-  tc_result_type = ast_node(TY_NAMED, 0, 0, 0, tc_variant_enum, 0);
+  tc_result_type = ast_node(TY_NAMED, 0, 0, 0, variant_enum, 0);
   node_aux[id] = tc_result_type;
   return 1;
 }
@@ -16000,6 +16036,8 @@ void tc_stmt(int id, int expected_kind, int expected_name) {
     else {
       int arm = node_b[id];
       int has_default = 0;
+      int flow_has_arm = 0;
+      (void)(tc_flow_save_base());
       while (arm != 0) {
         if (node_value[arm] == 0) {
           if ((has_default == 1) || (node_next[arm] != 0))
@@ -16010,6 +16048,15 @@ void tc_stmt(int id, int expected_kind, int expected_name) {
           (void)(tc_enter_scope());
           (void)(tc_stmt(node_b[arm], expected_kind, expected_name));
           (void)(tc_leave_scope());
+          if (flow_has_arm == 0) {
+            (void)(tc_flow_save_yes());
+            flow_has_arm = 1;
+            (void)(tc_flow_restore_base());
+          } else {
+            (void)(tc_flow_merge_yes());
+            (void)(tc_flow_save_yes());
+            (void)(tc_flow_restore_base());
+          }
         } else {
           int member = tc_match_variant_member(enum_decl, node_value[arm]);
           if (member == 0)
@@ -16024,6 +16071,15 @@ void tc_stmt(int id, int expected_kind, int expected_name) {
             (void)(tc_match_check_arm_bindings(member, node_a[arm]));
             (void)(tc_stmt(node_b[arm], expected_kind, expected_name));
             (void)(tc_leave_scope());
+            if (flow_has_arm == 0) {
+              (void)(tc_flow_save_yes());
+              flow_has_arm = 1;
+              (void)(tc_flow_restore_base());
+            } else {
+              (void)(tc_flow_merge_yes());
+              (void)(tc_flow_save_yes());
+              (void)(tc_flow_restore_base());
+            }
           }
         }
         arm = node_next[arm];
@@ -16039,6 +16095,12 @@ void tc_stmt(int id, int expected_kind, int expected_name) {
         }
       } else {
       }
+      if (flow_has_arm == 1) {
+        (void)(tc_flow_restore_base());
+        (void)(tc_flow_merge_yes());
+      } else {
+      }
+      (void)(tc_flow_end());
     }
   } else if ((k == N_PRINT) || (k == N_PRINTLN))
     (void)(tc_expr(node_a[id]));
@@ -16104,6 +16166,12 @@ void tc_stmt(int id, int expected_kind, int expected_name) {
     }
     if ((node_kind[node_b[id]] == N_DEFER) || (node_kind[node_c[id]] == N_DEFER))
       (void)(tc_fail(77));
+    else {
+    }
+    if ((((node_kind[node_b[id]] == N_LET) || (node_kind[node_c[id]] == N_LET)) ||
+         (node_kind[node_b[id]] == N_TUPLE_BIND)) ||
+        (node_kind[node_c[id]] == N_TUPLE_BIND))
+      (void)(tc_fail(78));
     else {
     }
     (void)(tc_flow_save_base());
@@ -16385,6 +16453,9 @@ void tc_print_hint(int code) {
         "explicit generic arguments must match a generic function's parameters"));
   else if (code == 77)
     (void)(runtime_write_string("put defer inside a block-scoped statement body"));
+  else if (code == 78)
+    (void)(runtime_write_string(
+        "put a local declaration or tuple binding inside a block-scoped statement body"));
   else if (code == 72)
     (void)(runtime_write_string("reference return escapes its owner"));
   else if (code == 73)
@@ -16494,6 +16565,9 @@ void tc_diag(void) {
         "type error: explicit generic arguments do not match the function parameters"));
   else if (tc_error_code == 77)
     (void)(runtime_write_string("type error: defer must be inside a block-scoped statement body"));
+  else if (tc_error_code == 78)
+    (void)(runtime_write_string(
+        "type error: local declaration must be inside a block-scoped statement body"));
   else if (tc_error_code == 72)
     (void)(runtime_write_string("type error: reference return escapes its owner"));
   else if (tc_error_code == 73)

@@ -1,0 +1,11 @@
+func pair(): (int, int) {
+  return (3, 4);
+}
+
+func main(): int {
+  if true then let value: int = 1;
+  else return 2;
+  if true then let (left, right): (int, int) = pair();
+  else return 3;
+  return 0;
+}

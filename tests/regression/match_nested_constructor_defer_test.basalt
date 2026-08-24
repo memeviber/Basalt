@@ -1,0 +1,65 @@
+enum Leaf {
+  Number {
+    value: int;
+  },
+  Empty
+};
+
+enum Node {
+  Wrapped {
+    item: Leaf;
+  },
+  Pair {
+    left: Leaf;
+    right: Leaf;
+  }
+};
+
+let cleanup_count: int = 0;
+
+func mark(value: int): void {
+  cleanup_count = cleanup_count + value;
+}
+
+func inspect_leaf(leaf: Leaf): int {
+  match leaf {
+    Number(value) => {
+      defer mark(1);
+      return value;
+    }
+    Empty => {
+      defer mark(2);
+      return 0;
+    }
+  }
+  return 99;
+}
+
+func inspect_node(node: Node): int {
+  match node {
+    Wrapped(item) => {
+      defer mark(10);
+      return inspect_leaf(item);
+    }
+    Pair(left, right) => {
+      defer mark(100);
+      return inspect_leaf(left) + inspect_leaf(right);
+    }
+  }
+  return 99;
+}
+
+func main(): int {
+  let wrapped: Node = Node::Wrapped(Leaf::Number(7));
+  if inspect_node(wrapped) != 7 then return 1;
+  if cleanup_count != 11 then return 2;
+
+  cleanup_count = 0;
+  if inspect_node(Node::Wrapped(Leaf::Empty())) != 0 then return 3;
+  if cleanup_count != 12 then return 4;
+
+  cleanup_count = 0;
+  if inspect_node(Node::Pair(Leaf::Number(2), Leaf::Empty())) != 2 then return 5;
+  if cleanup_count != 103 then return 6;
+  return 0;
+}
