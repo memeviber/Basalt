@@ -288,6 +288,7 @@ compile_run "$ROOT/tests/regression/match_default_chain_test.basalt" match_defau
 compile_run "$ROOT/tests/regression/match_arm_defer_test.basalt" match_arm_defer_test
 compile_run "$ROOT/tests/regression/match_constructor_subject_test.basalt" match_constructor_subject_test
 compile_run "$ROOT/tests/regression/match_nested_constructor_defer_test.basalt" match_nested_constructor_defer_test
+compile_run "$ROOT/tests/regression/match_nested_loop_defer_test.basalt" match_nested_loop_defer_test
 compile_run "$ROOT/tests/regression/match_branch_move_test.basalt" match_branch_move_test
 compile_run "$ROOT/tests/regression/if_match_and_tuple_branch_test.basalt" if_match_and_tuple_branch_test
 expect_reject "$ROOT/tests/regression/if_declaration_branch_invalid.basalt" if_declaration_branch_invalid
