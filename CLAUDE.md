@@ -1,30 +1,53 @@
 # CLAUDE.md — Basalt Bootstrap Compiler
 
-## Phạm vi làm việc
+## Purpose and authority
 
-Nguồn compiler đang được duy trì cho self-hosting là `src/bootstrap/basaltc.basalt`. Mọi thay đổi compiler, probe và regression mới phải dogfood qua Bootstrap compiler. **Không sửa, không build và không dùng `src/compiler/`** trong các vòng audit Bootstrap.
+This file defines the working contract for maintaining the self-hosting Bootstrap Basalt compiler. It is repository guidance for compiler changes, regression work, audits, generated-output verification, and documentation. When this file conflicts with the active source or an explicit project decision, the current repository source and the explicit project decision take precedence; any resulting policy change must be documented in the same change.
 
-`src/bootstrap/basaltc.seed.c` là frozen compiler seed dùng để dựng thế hệ Bootstrap hiện tại. File `src/bootstrap/fixed_point_production.sha256` phải khớp SHA-256 thực tế của seed trước khi coi fixed-point là hợp lệ.
+The active compiler source is [`src/bootstrap/basaltc.basalt`](src/bootstrap/basaltc.basalt). The frozen generated seed is [`src/bootstrap/basaltc.seed.c`](src/bootstrap/basaltc.seed.c). The recorded seed digest is [`src/bootstrap/fixed_point_production.sha256`](src/bootstrap/fixed_point_production.sha256).
 
-## Kiến trúc pipeline
+> **Bootstrap-only rule:** during Bootstrap audits and compiler feature work, modify and validate `src/bootstrap/basaltc.basalt` and its Bootstrap fixtures only. Do not edit, build, or use `src/compiler/` as an implementation or validation shortcut.
 
-Pipeline chuẩn là:
+## Working model
+
+Every task should be handled as a reproducible engineering change rather than as an informal source edit. The same standard applies to parser work, type checking, ownership, emitter behavior, include expansion, runtime safety, and documentation.
+
+| Area | Source of truth | Required evidence | Result that must be reported |
+|---|---|---|---|
+| Compiler implementation | `src/bootstrap/basaltc.basalt` | Focused reproducer and fresh Bootstrap build | Source change, semantic reason, and observed behavior. |
+| Frozen compiler state | `src/bootstrap/basaltc.seed.c` and its SHA-256 file | Checksum comparison and fixed-point verification | Whether the seed is unchanged, promoted, or intentionally pending. |
+| Language behavior | Positive and negative fixtures under `tests/` | Bootstrap compile result, diagnostic code, generated C, and runtime result where applicable | Whether behavior is valid, rejected, conservative, unsupported, or a confirmed bug. |
+| Generated C | Bootstrap output | Strict GCC/Clang compilation and sanitizer execution when relevant | Whether the generated translation unit is portable and memory-safe for the tested case. |
+| Documentation and diagrams | `CLAUDE.md` and `docs/architecture/` | Source-anchor or repository-state check | Which implementation facts are documented and which boundaries remain selected or omitted. |
+
+## Repository scope and pipeline
+
+The Bootstrap source contains the lexer, parser and AST construction, type checker, ownership and borrow analysis, generic specialization, C emitter, include expansion, runtime emission, and command-line driver. The generated runtime is written as C text by the emitter and is separate from the user-program token buffer.
+
+The normal self-hosting pipeline is:
 
 ```text
-basaltc.seed.c
-  → seed binary
-  → src/bootstrap/basaltc.basalt
-  → stage2.c / stage2 binary
-  → current.c / current binary
-  → generated C11 program
-  → GCC hoặc Clang binary
+src/bootstrap/basaltc.seed.c
+  → trusted seed executable
+  → Bootstrap compiler stage
+  → stage2 C and executable
+  → current Bootstrap compiler
+  → generated C11 translation unit
+  → GCC or Clang executable
 ```
 
-`src/bootstrap/basaltc.basalt` chứa lexer, parser/AST, type checker, ownership/borrow checker, generic specialization, C emitter, include expansion và CLI. Runtime C được emitter nhúng vào generated program; vì vậy generated C có thể lớn hơn phần application AST.
+The production fixed-point procedure extends this to successive generated compiler stages and must verify that the stable output repeats. In the current repository, the required stability condition is `n3.c == n4.c`, followed by a checksum comparison between the promoted seed and `fixed_point_production.sha256`.
 
-## Lệnh kiểm chứng chuẩn
+| Pipeline boundary | Responsibility | Important invariant |
+|---|---|---|
+| Frozen seed → stage | Bootstraps the current compiler without using `src/compiler/`. | The seed executable must be verified before trusting its output. |
+| Bootstrap source → generated C | Parses, checks, collects, and emits the user program. | The generated C must reflect checked Basalt semantics rather than an unvalidated AST. |
+| Generated C → host executable | Uses a strict C compiler and, when needed, sanitizer instrumentation. | GCC, Clang, and portability targets must not report diagnostics under the declared gate. |
+| Candidate stages → fixed point | Confirms that compiler generation has stabilized. | `n3.c` and `n4.c` must be byte-identical before promotion. |
 
-Từ root repository, dùng các lệnh sau:
+## Standard verification commands
+
+Run commands from the repository root. The canonical gates are:
 
 ```bash
 bash scripts/run_regression.sh
@@ -33,57 +56,123 @@ bash scripts/run_ffi_portability.sh
 bash scripts/fixed_point.sh
 ```
 
-Cờ strict mặc định là:
+The default strict C compilation flags are:
 
 ```text
 -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror
 ```
 
-Các fixture hợp lệ phải compile và chạy thành công. Fixture không hợp lệ phải bị Bootstrap compiler từ chối với diagnostic code đúng. Generated C phải được kiểm tra thêm bằng ASan/UBSan khi fixture có ownership, pointer, string, container, FFI hoặc control-flow cleanup.
+A normal validation sequence is staged from narrow to broad. First build a fresh Bootstrap compiler and run the focused reproducer. Then compile the generated C with strict GCC and Clang. Add ASan and UBSan when the change involves ownership, pointers, strings, containers, FFI, process execution, control-flow cleanup, or generated allocation logic. Finally run the full regression, ownership-stress, portability, and fixed-point gates.
 
-## Quy tắc audit bug
+| Test kind | Required expectation | Additional evidence |
+|---|---|---|
+| Positive fixture | Bootstrap accepts, generated C compiles, and the executable produces the expected result. | Capture the output and relevant generated-C fragment. |
+| Negative fixture | Bootstrap rejects the input with the intended diagnostic code and does not silently generate a valid-looking program. | Record the diagnostic label, message, source location, and code. |
+| Ownership or memory fixture | Compile and run under strict mode and sanitizers. | Distinguish a controlled runtime panic from an allocator or use-after-free failure. |
+| Portability fixture | Check GCC, Clang, and configured cross-platform object targets. | Preserve the exact compiler flags and target result. |
+| Fixed-point check | Successive compiler outputs stabilize and the seed digest is correct. | Record stage names, byte comparisons, and checksum. |
 
-Không ghi nhận một nghi vấn là compiler bug chỉ dựa trên generated C nhìn xấu. Trước tiên phải tạo reproduction tối thiểu, chạy qua Bootstrap compiler fresh, kiểm tra generated C, compile strict GCC, chạy runtime và nếu liên quan memory/ownership thì chạy ASan/UBSan. Sau đó phân loại thành:
+## Source-change protocol
 
-| Nhóm | Tiêu chí |
-|---|---|
-| Compiler bug | Source hợp lệ nhưng generated C sai, semantics sai hoặc diagnostic sai |
-| Invalid syntax | Parser phải từ chối theo grammar hiện tại |
-| Conservative policy | Type checker từ chối an toàn dù C có thể chạy |
-| Feature gap | Tính năng chưa được ngôn ngữ định nghĩa |
-| Runtime safety abort | Source được compile nhưng runtime registry/panic chủ động dừng vì vi phạm ownership/runtime contract |
+A compiler change must begin with a minimal reproduction or a clearly stated feature requirement. The implementation must remain in the Bootstrap source. If generated seed content changes, rebuild the relevant stages, run focused and full gates, verify fixed-point stability, and promote the seed only after the candidate has passed those checks.
 
-Không sửa policy bảo thủ thành permissive chỉ để một probe pass. Mọi thay đổi phải giữ fixed-point, strict portability và sanitizer behavior.
-
-## Control-flow và defer
-
-`for` được sinh trực tiếp thành C `for`; step nằm trong phần increment của C. Không clone hoặc sinh step thủ công trước `continue`, vì C tự chạy step sau `continue`.
-
-`while` và `for` yêu cầu body dạng block ở parser. `if` không được nhận direct `defer`, direct local declaration hoặc direct tuple binding làm branch body; các trường hợp này lần lượt dùng diagnostic code 77 và 78 để tránh generated C kiểu `if (...) declaration;` hoặc `if (...) defer;` không hợp lệ.
-
-`match` tạo temporary subject và chuỗi `if/else if/else` trên tag. Mỗi arm có block C và cleanup scope độc lập. Wildcard/default phải xuất hiện một lần và ở cuối; nếu không có default thì các variant phải exhaustive.
-
-`defer` được lưu trong emitter stack. Block/match arm lưu mốc stack, flush cleanup theo thứ tự ngược trước khi scope đóng, và control-flow exit flush các defer thuộc scope bị thoát. `return expr` phải materialize expression trước cleanup để defer không làm thay đổi giá trị trả về.
-
-Generated C có thể còn các statement unreachable sau `return`, `break` hoặc `continue` trong các path khác nhau. Chúng không được coi là lỗi nếu strict C, runtime và sanitizer đều pass; emitter hiện loại bỏ các cleanup unreachable mà termination analysis chứng minh được.
-
-## Ownership và borrow checking
-
-Type checker dùng flow snapshots cho `if`, `while`, `for` và `match`. Match arms được phân tích từ baseline rồi join state; move ở một arm không được lan trực tiếp thành false positive sang arm loại trừ khác. Chính sách hiện tại cố ý bảo thủ với root-place borrow; raw pointer, pointer arithmetic, `extern` và `includec` là ranh giới low-level phải kiểm tra bằng sanitizer.
-
-Một edge case cần giữ trong mind khi audit: deferred release như `defer str::free(value);` được thực thi ở cleanup point. Nếu chương trình cũng release cùng value bằng một statement khác, runtime registry có thể panic code 2. Đây là runtime safety behavior hiện tại, không tự động coi là compiler miscompile nếu chưa có đặc tả yêu cầu compile-time rejection.
-
-## Quy tắc thay đổi file
-
-Chỉ stage source/harness/regression fixture có chủ đích. Không commit `.tmp/`, generated C, executable, benchmark output, compiler log hoặc audit notes bị ignore. Trước commit cần chạy:
+Before committing any change, run:
 
 ```bash
 git diff --check
 git status --short
 ```
 
-Sau source change, phải dựng Bootstrap stage fresh và chạy lại focused tests trước khi chạy full gates. Nếu source cuối thay đổi code emitter/type checker, phải chạy fixed-point lại trước seed promotion; seed promotion chỉ được thực hiện khi `n3.c == n4.c` và checksum được cập nhật đúng.
+Only intentional source, test, harness, or documentation files should be staged. Do not commit generated executables, temporary generated C, benchmark output, compiler logs, audit notes, or ignored `.tmp/` artifacts. Do not force-push. Fetch the remote before publishing and push the named audit branch explicitly when working outside the default branch.
 
-## Đồ thị mã nguồn
+## Bug-audit protocol
 
-Đồ thị cấp cao của pipeline và các vùng control-flow/defer được lưu tại `.tmp/bootstrap-source-graph.mmd`. PNG render tương ứng là `.tmp/bootstrap-source-graph.png`. Đây là đồ thị quan hệ kiến trúc, không thay thế call graph đầy đủ của toàn bộ 8,000+ dòng Bootstrap source.
+A suspicious output is not automatically a compiler bug. A disciplined audit must separate source validity, language policy, missing features, runtime safety behavior, and proven miscompilation.
+
+| Classification | Evidence required | Correct response |
+|---|---|---|
+| Confirmed compiler bug | Valid Basalt source produces incorrect semantics, incorrect generated C, or an incorrect diagnostic compared with the language contract. | Preserve a minimal regression fixture, patch only Bootstrap source, and rerun the complete relevant gates. |
+| Invalid syntax or invalid program | The source violates the current grammar or semantic contract. | Keep the rejection; improve the diagnostic only if that is the requested behavior. |
+| Conservative policy | The checker rejects a construct intentionally to preserve safety even though unrestricted C could execute it. | Document the policy; do not weaken it merely to make a probe pass. |
+| Feature gap | The behavior is not defined or implemented by the current language. | Record the gap separately from a bug and add a design decision before implementing it. |
+| Runtime safety abort | Compilation succeeds but the generated runtime intentionally stops on a contract violation, such as releasing an untracked pointer. | Verify the exit code and sanitizer result; do not label the behavior a compiler miscompile without a contrary language requirement. |
+
+The minimum reproduction record should contain the input fixture, compiler command, diagnostic or runtime result, generated-C fragment, host compiler result, sanitizer result when relevant, and the classification rationale. A source-looking output is not sufficient evidence by itself.
+
+## Parser and AST contracts
+
+The parser returns identifiers into compiler-managed AST and type-node arrays. Parser failure sentinels are part of the internal contract: expression and statement parsing use a negative failure result, while type parsing uses `0` for malformed or incomplete type syntax. Callers must preserve this distinction.
+
+Expression parsing uses precedence climbing for binary, comparison, logical, bitwise, shift, and compound-assignment operators. The parser must construct a complete right-hand expression before emission. Compound assignment must remain a single-evaluation operation in generated C; it must not be desugared into a form that evaluates a side-effecting left-hand place twice.
+
+The parser requires block bodies for `while` and `for`. Direct `defer`, direct local declaration, and direct tuple binding are not accepted as bare `if` branch bodies. The established invalid-branch diagnostics are code 77 for direct `defer` and code 78 for direct declaration or tuple-binding cases. A valid block may contain those constructs where the grammar permits them.
+
+## Type, ownership, borrow, and lifetime contracts
+
+The type checker annotates expressions and maintains lexical scopes, ownership state, borrow state, generic bindings, closure capture state, field-target state, and control-flow snapshots. Checker functions return `void`; semantic failure is reported through fatal diagnostics rather than an error value.
+
+| Semantic area | Current rule | Audit focus |
+|---|---|---|
+| Lexical scope | `tc_enter_scope` records a variable boundary and `tc_leave_scope` unwinds local bindings and borrow relationships. | Verify shadowing, scope exit, and borrow cleanup against nested blocks and closures. |
+| Ownership move | A consuming call marks an owned variable moved and clears its owned state. | Check repeated moves, non-owned values, active borrows, and branch joins. |
+| Borrow state | Borrow counts, mutability, source, parent, parameter, and FFI-borrow metadata are tracked conservatively. | Check escape, conflict, mutation, and scope-exit behavior. |
+| Branch flow | `if`, loops, and `match` use baseline snapshots, branch snapshots, restoration, conservative merge, and frame end. | Confirm that one arm’s move or borrow does not contaminate an exclusive sibling arm. |
+| Raw boundaries | Raw pointers, pointer arithmetic, `extern`, `includec`, and generated C are low-level boundaries. | Require strict compilation and sanitizer coverage; do not infer safety from type checking alone. |
+
+The current defer ownership edge case is documented rather than silently reclassified: `defer str::free(value);` evaluates at cleanup time, and a second release of the same tracked allocation can trigger the runtime registry’s controlled panic code 2. This is a runtime safety behavior unless the language contract explicitly requires compile-time rejection.
+
+## Control flow, match, and defer
+
+`for` is emitted as a C `for`; its step belongs in the C increment clause. Do not clone or emit the step manually before `continue`, because C executes the increment clause after `continue` reaches the loop boundary. `while` and `for` bodies remain block-based in the parser.
+
+`match` emits a temporary subject and a tag-based `if`/`else if`/`else` chain. Each arm has an independent emitter cleanup baseline and C block. A wildcard/default arm must appear at most once and at the end; without a default, the checker requires exhaustive coverage where the language contract demands it. Nested enum constructors must preserve the active enum context while checking nested arguments.
+
+`defer` is stored in an emitter LIFO stack. A block or match arm records a stack baseline, cleanup is emitted in reverse registration order, and control-flow exits flush defers belonging to scopes being exited. A return expression with active cleanup must be materialized before defer emission so cleanup cannot change the returned value. Deferred expressions themselves are evaluated at cleanup time under the current implementation.
+
+The emitter uses termination analysis to avoid cleanup that is statically unreachable after `return`, `break`, `continue`, or a terminal match arm. Generated C that contains ordinary unreachable statements is not automatically a compiler bug; classify it only after strict compilation, runtime execution, and sanitizer behavior have been checked against the intended semantics.
+
+## Include, FFI, portability, and generated C
+
+Recursive `include` expansion resolves a canonical target, records the dependency edge, checks for a cycle, and recursively processes Basalt source. `includec` follows a separate raw-C path and copies the target bytes into the C-source buffer. Include handles are borrowed by the expansion routine; the owner of the root handle remains responsible for closing it.
+
+FFI and raw C are controlled boundaries rather than ordinary type-safe Basalt code. Any change involving `extern`, header registration, `includec`, ABI mapping, platform process execution, allocation, alignment, or thread/runtime shims must be checked with strict GCC and Clang and with the configured portability harness. Do not claim Windows, POSIX, MinGW, or sanitizer compatibility unless that target was actually tested.
+
+Generated C has two output channels. The emitter first writes the runtime prelude and registered FFI headers through `emit_c_file`; it then writes raw C source and the typed token buffer. `gen_program` orchestrates token generation but does not directly serialize the runtime. `--line` enables source mapping directives for generated C, while `--no-line` disables them; preserve the intended mode for the specific test or seed workflow.
+
+## Regression and stress-test policy
+
+Every confirmed bug must receive a focused regression fixture. Complex control-flow, match, defer, ownership, pointer, generic, closure, string, FFI, and recursive-include changes should also receive adversarial or stress coverage where the failure mode could be state-dependent.
+
+A fixture should state whether it is positive or negative, the expected output or diagnostic code, and any required compiler mode. Test additions must be runnable in a clean clone and must not depend on ignored local files. If a fixture depends on an intermediate directory or marker file, commit the minimal marker needed to preserve that directory in a clean checkout.
+
+Performance comparisons are diagnostic evidence, not semantic proof. Report source-to-C generation time, host C compilation time, generated-C size, and runtime measurements separately. Never substitute a performance result for strict compilation, sanitizer execution, or fixed-point verification.
+
+## Documentation and architecture graphs
+
+The selected architecture and function-level artifacts are stored in [`docs/architecture/`](docs/architecture/). The function reference is [`bootstrap-function-reference.md`](docs/architecture/bootstrap-function-reference.md), with its Mermaid source and rendered PNG beside it. The diagrams describe selected functions and grouped external boundaries; they are not a claim that every helper in the 379-function Bootstrap source has been shown individually.
+
+Documentation changes must remain source-grounded. Function anchors should point to current definition lines, caller/callee descriptions should distinguish selected relationships from external boundaries, and generated diagrams should be rendered and visually inspected before publication. Temporary generator scripts and evidence logs may remain under `.tmp/` when they are intentionally ignored, but they must not be presented as tracked deliverables.
+
+## Completion checklist
+
+Before declaring a Bootstrap compiler task complete, verify all applicable items:
+
+| Check | Required question |
+|---|---|
+| Scope | Did the implementation stay in `src/bootstrap/` and avoid `src/compiler/`? |
+| Reproduction | Is there a minimal fixture or an explicit feature contract? |
+| Semantics | Were parser, type, ownership, borrow, control-flow, defer, and include effects considered where relevant? |
+| Generated C | Was the output inspected and compiled with the declared strict flags? |
+| Safety | Were ASan/UBSan and portability checks run when the change could affect them? |
+| Regression | Were focused, full, negative, stress, and fixed-point tests run as applicable? |
+| Seed | If generated compiler source changed, was fixed-point stability and the recorded checksum verified before promotion? |
+| Documentation | Were source anchors, graphs, and repository guidance updated consistently? |
+| Publishing | Was `git diff --check` run, only intentional files staged, and the non-force push verified remotely? |
+
+## References
+
+[1]: src/bootstrap/basaltc.basalt "Bootstrap Basalt compiler source"
+[2]: src/bootstrap/basaltc.seed.c "Frozen generated Bootstrap seed"
+[3]: src/bootstrap/fixed_point_production.sha256 "Recorded production seed checksum"
+[4]: docs/architecture/bootstrap-function-reference.md "Selected Bootstrap function reference"
+[5]: docs/architecture/bootstrap-function-graph.mmd "Selected Bootstrap function graph"
