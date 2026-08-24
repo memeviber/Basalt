@@ -1,0 +1,27 @@
+// Explicit arena lifetime for object graphs that may contain cyclic pointers.
+//
+// Arena allocation is intentionally different from memory_alloc: values
+// allocated through an Arena are released together by arena::free. Pointer
+// fields may therefore point back into the same arena without requiring a
+// recursive destructor or reference-count cycle breaking.
+namespace arena {
+  struct Arena {
+    handle: void*;
+  }
+
+  func new(): Arena {
+    let arena: Arena = 0;
+    arena.handle = basalt_arena_make();
+    return arena;
+  }
+
+  func alloc<T>(arena: Arena, count: int, zero: T): T* {
+    return basalt_arena_alloc(arena.handle, count, zero);
+  }
+
+  func free(arena: Arena): Arena {
+    if arena.handle != 0 then basalt_arena_free(arena.handle);
+    arena.handle = 0;
+    return arena;
+  }
+}

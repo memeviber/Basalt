@@ -1,0 +1,23 @@
+include "../../src/stdlib/arena.basalt"
+
+struct Node {
+  value: int;
+  next: Node*;
+}
+
+func main(): int {
+  let arena: arena::Arena = arena::new();
+  let zero: Node = 0;
+  let first: Node* = arena::alloc(arena, 1, zero);
+  let second: Node* = arena::alloc(arena, 1, zero);
+  first.value = 21;
+  second.value = 21;
+  first.next = second;
+  second.next = first;
+  let second_again: Node* = first.next;
+  let first_again: Node* = second_again.next;
+  let result: int = first_again.value;
+  arena = arena::free(arena);
+  println result;
+  return 0;
+}
