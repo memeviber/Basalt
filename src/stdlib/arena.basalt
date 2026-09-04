@@ -15,6 +15,12 @@ namespace arena {
     return arena;
   }
 
+  func child(parent: Arena): Arena {
+    let arena: Arena = 0;
+    arena.handle = basalt_arena_child(parent.handle);
+    return arena;
+  }
+
   func alloc<T>(arena: Arena, count: int, zero: T): T* {
     return basalt_arena_alloc(arena.handle, count, zero);
   }
