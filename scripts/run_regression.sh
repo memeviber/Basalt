@@ -248,6 +248,10 @@ prefix_import_checks() {
 compile_run "$ROOT/tests/stress/modulo_stress.basalt" modulo_stress
 compile_run "$ROOT/tests/regression/stdlib_growth_test.basalt" stdlib_growth_test
 compile_run "$ROOT/tests/regression/stdlib_containers_test.basalt" stdlib_containers_test
+compile_run_with_output "$ROOT/tests/regression/arena_cycle_test.basalt" arena_cycle_test $'21\n'
+compile_run_with_output "$ROOT/tests/regression/arena_nested_parent_child_test.basalt" arena_nested_parent_child_test $'47\n'
+compile_run_with_output "$ROOT/tests/regression/arena_cycle_stress_test.basalt" arena_cycle_stress_test $'1\n'
+expect_runtime_failure_with_input "$ROOT/tests/regression/arena_use_after_free_runtime_invalid.basalt" arena_use_after_free_runtime_invalid '' 2
 compile_run "$ROOT/tests/regression/option_test.basalt" option_test
 compile_run "$ROOT/tests/regression/option_result_combinators_test.basalt" option_result_combinators_test
 compile_run "$ROOT/tests/regression/stdlib_stabilization_test.basalt" stdlib_stabilization_test

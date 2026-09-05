@@ -121,6 +121,22 @@ The type checker annotates expressions and maintains lexical scopes, ownership s
 
 The current defer ownership edge case is documented rather than silently reclassified: `defer str::free(value);` evaluates at cleanup time, and a second release of the same tracked allocation can trigger the runtime registry’s controlled panic code 2. This is a runtime safety behavior unless the language contract explicitly requires compile-time rejection.
 
+## Runtime allocation and cyclic graph lifetimes
+
+The generated runtime maintains an allocation registry for tracked pointers. The registry uses an open-addressed hash index with tombstones and a compact live-pointer array, so lookup is expected `O(1)` rather than a linear scan. Releasing an allocation uses swap-delete in the live array and updates the moved entry’s hash slot. A successful `realloc` must rebind the registry entry through the saved index and hash slot; it must not reuse the old pointer as if it were still a live allocation.
+
+The registry is an allocation-safety boundary, not a graph collector. It does not inspect pointer fields, infer object edges, count references, or detect arbitrary cycles. Replacing the index structure therefore improves `track`, `find`, `release`, and resize behavior but does not by itself reclaim unreachable cyclic graphs.
+
+For cyclic object graphs, [`src/stdlib/arena.basalt`](src/stdlib/arena.basalt) provides an explicit arena lifetime. `arena::alloc<T>` allocates typed storage and records each block under the arena; `arena::free` releases every block and then the arena handle as a group. Cyclic pointers inside the arena are safe because cleanup follows the allocation list rather than recursively traversing object fields. This is deterministic group-lifetime management, not tracing garbage collection or general cycle detection.
+
+`arena::child(parent)` creates a child arena linked into a parent-child ownership tree. Freeing a child detaches and closes only that child; freeing a parent closes all still-attached descendants before releasing the parent’s own blocks. The runtime rejects invalid or already-freed handles through controlled panic behavior and does not permit a child to remain linked to a released parent. Nested cleanup is measured by the number of descendants and owned blocks, not by user-graph traversal.
+
+The fixture [`arena_leak_probe_test.basalt`](tests/regression/arena_leak_probe_test.basalt) intentionally omits both `arena::free` calls after constructing a cyclic node/edge graph. It is a leak-oriented probe, not a normal leak-free assertion: the current process-level registry cleanup reclaims tracked allocations at exit, so a clean exit does not prove that a long-running service released its arena promptly. Use the probe to inspect generated behavior and distinguish an omitted explicit lifetime boundary from invalid access or compiler-generated cleanup errors.
+
+Arena-owned objects must not be individually passed to `memory_free`, and pointers into a freed arena must not be used afterward. Use ordinary `memory_alloc` when each allocation needs an independent lifetime. If a future ownership design adds `Owned`, `Borrow`, or `Weak` references, it must preserve this distinction and specify whether cycles are rejected statically, managed by a collector, or placed in an explicit arena.
+
+The arena API and registry are currently process-local runtime facilities. The registry is not a replacement for synchronization around concurrent allocation or release; any multithreaded extension must define the required locking or atomicity contract before changing these routines.
+
 ## Control flow, match, and defer
 
 `for` is emitted as a C `for`; its step belongs in the C increment clause. Do not clone or emit the step manually before `continue`, because C executes the increment clause after `continue` reaches the loop boundary. `while` and `for` bodies remain block-based in the parser.
@@ -165,6 +181,7 @@ Before declaring a Bootstrap compiler task complete, verify all applicable items
 | Generated C | Was the output inspected and compiled with the declared strict flags? |
 | Safety | Were ASan/UBSan and portability checks run when the change could affect them? |
 | Regression | Were focused, full, negative, stress, and fixed-point tests run as applicable? |
+| Cyclic lifetimes | If pointer graphs can cycle, was the explicit arena/ownership policy tested without recursive cleanup? |
 | Seed | If generated compiler source changed, was fixed-point stability and the recorded checksum verified before promotion? |
 | Documentation | Were source anchors, graphs, and repository guidance updated consistently? |
 | Publishing | Was `git diff --check` run, only intentional files staged, and the non-force push verified remotely? |
@@ -176,3 +193,4 @@ Before declaring a Bootstrap compiler task complete, verify all applicable items
 [3]: src/bootstrap/fixed_point_production.sha256 "Recorded production seed checksum"
 [4]: docs/architecture/bootstrap-function-reference.md "Selected Bootstrap function reference"
 [5]: docs/architecture/bootstrap-function-graph.mmd "Selected Bootstrap function graph"
+[6]: src/stdlib/arena.basalt "Explicit arena lifetime for cyclic pointer graphs"

@@ -1232,6 +1232,48 @@ func gen_memory_builtin(id: int): void {
   }
 }
 
+func gen_arena_builtin(id: int): void {
+  let arena_arg: int = node_a[id];
+  let count_arg: int = node_next[arena_arg];
+  let witness: int = node_next[count_arg];
+  let elem_kind: int = gen_scalar_kind(witness);
+  let elem_name: int = gen_scalar_name(witness);
+  let gen_witness_ty: int = 0;
+  let complex_witness_ty: int = 0;
+  if elem_kind == TY_GENERIC then {
+    let wty: int = tc_emit_arg_type(witness);
+    if wty != 0 then gen_witness_ty = gen_substitute_type(wty);
+  } else if elem_kind == TY_PTR then {
+    let pointer_witness_ty: int = tc_emit_arg_type(witness);
+    if pointer_witness_ty != 0 then complex_witness_ty = gen_substitute_type(pointer_witness_ty);
+  }
+  code_emit(C_PUNCT, 6);
+  code_emit(C_PUNCT, 6);
+  code_emit(C_KW, 4);
+  code_emit(C_PUNCT, 8);
+  code_emit(C_PUNCT, 6);
+  gen_expr(witness);
+  code_emit(C_PUNCT, 8);
+  code_emit(C_PUNCT, 7);
+  code_emit(C_PUNCT, 6);
+  if gen_witness_ty != 0 then code_emit(C_IDENT, gen_mangled_type_symbol(gen_witness_ty));
+  else if complex_witness_ty != 0 then gen_type(node_kind[complex_witness_ty], complex_witness_ty, 0);
+  else gen_array_elem_type(elem_kind, elem_name);
+  code_emit(C_PUNCT, 1);
+  code_emit(C_PUNCT, 8);
+  code_emit(C_IDENT, sym_c_symbol(node_value[id]));
+  code_emit(C_PUNCT, 6);
+  gen_expr(arena_arg);
+  code_emit(C_PUNCT, 7);
+  gen_expr(count_arg);
+  code_emit(C_PUNCT, 7);
+  if gen_witness_ty != 0 then { code_emit(C_IDENT, -1011); code_emit(C_PUNCT, 4); code_emit(C_IDENT, gen_mangled_type_symbol(gen_witness_ty)); code_emit(C_PUNCT, 5); }
+  else if complex_witness_ty != 0 then { code_emit(C_IDENT, -1011); code_emit(C_PUNCT, 4); gen_type(node_kind[complex_witness_ty], complex_witness_ty, 0); code_emit(C_PUNCT, 5); }
+  else gen_array_sizeof(elem_kind, elem_name);
+  code_emit(C_PUNCT, 8);
+  code_emit(C_PUNCT, 8);
+}
+
 func gen_call_name(id: int): int {
   let f: int = tc_find_function_ctx(node_value[id], node_scope[id]);
   if f == 0 then return sym_c_symbol(node_value[id]);
@@ -1419,6 +1461,8 @@ func gen_expr(id: int): void {
     let call_name: int = node_value[id];
     let btag: int = bi_tag(call_name);
     if btag == BI_TC_MEM_ALLOC || btag == BI_TC_MEM_ALLOC_ALIGNED || btag == BI_TC_MEM_RESIZE || btag == BI_TC_MEM_FREE then gen_memory_builtin(id);
+    else if btag == BI_TC_ARENA_ALLOC then gen_arena_builtin(id);
+    else if btag == BI_TC_ARENA_CHILD then { code_emit(C_IDENT, -1025); code_emit(C_PUNCT, 6); gen_expr(node_a[id]); code_emit(C_PUNCT, 8); }
     else { code_emit(C_IDENT, gen_call_name(id)); code_emit(C_PUNCT, 6); let arg: int = node_a[id]; while arg != 0 { gen_expr(arg); if node_next[arg] != 0 then code_emit(C_PUNCT, 7); arg = node_next[arg]; } code_emit(C_PUNCT, 8); }
   } else if k == N_INDIRECT_CALL then {
     let callee_type_expr: int = tc_emit_arg_type(node_a[id]);
@@ -4131,6 +4175,10 @@ let BI_TC_CHANNEL_FREE: int = 26;
 let BI_TC_THREAD_SPAWN: int = 27;
 let BI_TC_THREAD_JOIN: int = 28;
 let BI_TC_THREAD_YIELD: int = 29;
+let BI_TC_ARENA_MAKE: int = 35;
+let BI_TC_ARENA_ALLOC: int = 36;
+let BI_TC_ARENA_FREE: int = 37;
+let BI_TC_ARENA_CHILD: int = 38;
 let BI_FLAG_RESERVED: int = 1;
 let BI_FLAG_OWNED: int = 2;
 let BI_FLAG_CONSUME: int = 4;
@@ -4349,6 +4397,10 @@ func bi_init(): void {
   bi_register("basalt_thread_spawn", BI_TC_THREAD_SPAWN, BI_FLAG_RESERVED + BI_FLAG_OWNED);
   bi_register("basalt_thread_join", BI_TC_THREAD_JOIN, BI_FLAG_RESERVED);
   bi_register("basalt_thread_yield", BI_TC_THREAD_YIELD, BI_FLAG_RESERVED);
+  bi_register("basalt_arena_make", BI_TC_ARENA_MAKE, BI_FLAG_RESERVED + BI_FLAG_OWNED);
+  bi_register("basalt_arena_alloc", BI_TC_ARENA_ALLOC, BI_FLAG_RESERVED);
+  bi_register("basalt_arena_free", BI_TC_ARENA_FREE, BI_FLAG_RESERVED + BI_FLAG_CONSUME);
+  bi_register("basalt_arena_child", BI_TC_ARENA_CHILD, BI_FLAG_RESERVED + BI_FLAG_OWNED);
   bi_register("malloc", BI_TC_NONE, BI_FLAG_RESERVED);
   bi_register("calloc", BI_TC_NONE, BI_FLAG_RESERVED);
   bi_register("realloc", BI_TC_NONE, BI_FLAG_RESERVED);
@@ -6909,6 +6961,40 @@ func tc_expr(id: int): void {
     let call_name: int = node_value[id];
     let btag: int = bi_tag(call_name);
     if bi_has_flag(call_name, BI_FLAG_OWNED) == 1 then tc_expr_is_owned = 1;
+    if btag == BI_TC_ARENA_MAKE then {
+      if node_a[id] != 0 then { tc_fail(13); return; }
+      tc_kind = TY_PTR; tc_name = 0; tc_elem_kind = TY_VOID; tc_elem_name = 0;
+      tc_result_type = ast_node(TY_PTR, ast_node(TY_VOID, 0, 0, 0, 0, 0), 0, 0, 0, 0); return;
+    }
+    if btag == BI_TC_ARENA_ALLOC then {
+      let aa: int = node_a[id];
+      if aa == 0 || node_next[aa] == 0 || node_next[node_next[aa]] == 0 || node_next[node_next[node_next[aa]]] != 0 then { tc_fail(13); return; }
+      tc_expr(aa);
+      if tc_kind != TY_PTR || tc_elem_kind != TY_VOID then { tc_fail(8); return; }
+      aa = node_next[aa]; tc_expr(aa); if tc_kind != TY_INT then { tc_fail(17); return; }
+      aa = node_next[aa]; tc_expr(aa);
+      if tc_kind == TY_VOID then { tc_fail(17); return; }
+      let wk: int = tc_kind; let wn: int = tc_name;
+      let witness_ty: int = tc_result_type;
+      if witness_ty == 0 then witness_ty = tc_type_node_from_summary(wk, wn, tc_elem_kind, tc_elem_name);
+      tc_kind = TY_PTR; tc_name = 0; tc_elem_kind = wk; tc_elem_name = wn;
+      tc_result_type = ast_node(TY_PTR, witness_ty, 0, 0, 0, 0); return;
+    }
+    if btag == BI_TC_ARENA_CHILD then {
+      let aa: int = node_a[id];
+      if aa == 0 || node_next[aa] != 0 then { tc_fail(13); return; }
+      tc_expr(aa);
+      if tc_kind != TY_PTR || tc_elem_kind != TY_VOID then { tc_fail(8); return; }
+      tc_kind = TY_PTR; tc_name = 0; tc_elem_kind = TY_VOID; tc_elem_name = 0;
+      tc_result_type = ast_node(TY_PTR, ast_node(TY_VOID, 0, 0, 0, 0, 0), 0, 0, 0, 0); return;
+    }
+    if btag == BI_TC_ARENA_FREE then {
+      let aa: int = node_a[id];
+      if aa == 0 || node_next[aa] != 0 then { tc_fail(13); return; }
+      tc_expr(aa);
+      if tc_kind != TY_PTR || tc_elem_kind != TY_VOID then { tc_fail(8); return; }
+      tc_kind = TY_VOID; tc_name = 0; tc_elem_kind = 0; tc_elem_name = 0; tc_result_type = 0; return;
+    }
     if btag == BI_TC_MEM_ALLOC then {
       let aa: int = node_a[id];
       if aa == 0 || node_next[aa] == 0 || node_next[node_next[aa]] != 0 then { tc_fail(13); return; }
@@ -8299,6 +8385,10 @@ func emit_c_token(out: int*, kind: int, value: int): void {
     else if value == -1019 then write_string(out, "basalt_memory_alloc_aligned");
     else if value == -1020 then write_string(out, "_Alignas");
     else if value == -1021 then write_string(out, "f");
+    else if value == -1022 then write_string(out, "basalt_arena_make");
+    else if value == -1023 then write_string(out, "basalt_arena_alloc");
+    else if value == -1024 then write_string(out, "basalt_arena_free");
+    else if value == -1025 then write_string(out, "basalt_arena_child");
     else emit_identifier(out, value);
   } else if kind == C_INT then emit_int_text(out, value);
   else if kind == C_RAW then emit_symbol(out, value);
@@ -8410,12 +8500,12 @@ func emit_runtime(out: int*): void {
   write_string(out, "static BASALT_UNUSED int close_file(void* h){return fclose((FILE*)h);}\n");
   write_string(out, "static BASALT_UNUSED int write_char(void* h,int c){return fputc(c,(FILE*)h);}\n");
   write_string(out, "static BASALT_UNUSED int write_string(void* h,const char* s){return fputs(s,(FILE*)h);}\n");
-  write_string(out, "static void** basalt_live=NULL;static size_t basalt_live_n=0,basalt_live_cap=0;\n");
-  write_string(out, "static BASALT_UNUSED size_t basalt_find(void* p){size_t i;for(i=0;i<basalt_live_n;i++)if(basalt_live[i]==p)return i;return (size_t)-1;}\n");
-  write_string(out, "static BASALT_UNUSED void basalt_validate(void){size_t i,j;for(i=0;i<basalt_live_n;i++){if(!basalt_live[i])basalt_panic(2);for(j=i+1;j<basalt_live_n;j++)if(basalt_live[i]==basalt_live[j])basalt_panic(2);}}\n");
-  write_string(out, "static BASALT_UNUSED void basalt_cleanup(void){size_t i;basalt_validate();for(i=0;i<basalt_live_n;i++)free(basalt_live[i]);free(basalt_live);basalt_live=NULL;basalt_live_n=basalt_live_cap=0;}\n");
-  write_string(out, "static BASALT_UNUSED void* basalt_track(void* p){size_t c;void**q;if(!p)return NULL;if(basalt_find(p)!=(size_t)-1)basalt_panic(2);if(basalt_live_n==basalt_live_cap){if(basalt_live_cap>(size_t)-1/2)c=(size_t)-1;else c=basalt_live_cap?basalt_live_cap*2:32;if(c>(size_t)-1/sizeof(void*))basalt_panic(2);q=(void**)realloc(basalt_live,c*sizeof(void*));if(!q)basalt_panic(2);basalt_live=q;basalt_live_cap=c;}basalt_live[basalt_live_n++]=p;atexit(basalt_cleanup);return p;}\n");
-  write_string(out, "static BASALT_UNUSED void basalt_release(void* p){size_t i;if(!p)return;i=basalt_find(p);if(i==(size_t)-1)basalt_panic(2);free(p);basalt_live[i]=basalt_live[--basalt_live_n];}\n");
+  write_string(out, "static void** basalt_live=NULL;static size_t basalt_live_n=0,basalt_live_cap=0;static size_t* basalt_hash_slots=NULL;static size_t basalt_hash_cap=0,basalt_hash_tombstones=0;\n");
+  write_string(out, "static BASALT_UNUSED size_t basalt_hash_value(void*p){return(size_t)(((uintptr_t)p)>>3);}\nstatic BASALT_UNUSED void basalt_hash_insert_index(size_t index){size_t pos=basalt_hash_value(basalt_live[index])&(basalt_hash_cap-1);size_t tomb=(size_t)-1;while(basalt_hash_slots[pos]!=0){if(basalt_hash_slots[pos]==(size_t)-1){if(tomb==(size_t)-1)tomb=pos;}pos=(pos+1)&(basalt_hash_cap-1);}if(tomb!=(size_t)-1)pos=tomb;else{if(basalt_hash_tombstones>0)basalt_hash_tombstones--;};basalt_hash_slots[pos]=index+1;}\nstatic BASALT_UNUSED void basalt_hash_rebuild(size_t requested){size_t cap=32;size_t*slots;size_t*old;size_t i;if(requested>(size_t)-1/2)basalt_panic(2);while(cap<requested*2){if(cap>(size_t)-1/2)basalt_panic(2);cap*=2;}slots=(size_t*)calloc(cap,sizeof(size_t));if(!slots)basalt_panic(5);old=basalt_hash_slots;basalt_hash_slots=slots;basalt_hash_cap=cap;basalt_hash_tombstones=0;for(i=0;i<basalt_live_n;i++)basalt_hash_insert_index(i);free(old);}\nstatic BASALT_UNUSED void basalt_hash_ensure(void){size_t limit;if(basalt_hash_cap==0){basalt_hash_rebuild(basalt_live_n);return;}limit=basalt_hash_cap-basalt_hash_cap/4;if(basalt_live_n>=limit||basalt_hash_tombstones>=limit-basalt_live_n){if(basalt_hash_cap>(size_t)-1/2)basalt_panic(2);basalt_hash_rebuild(basalt_hash_cap);}}\nstatic BASALT_UNUSED size_t basalt_hash_slot_for(void*p){size_t pos;if(!p||basalt_hash_cap==0)return(size_t)-1;pos=basalt_hash_value(p)&(basalt_hash_cap-1);while(basalt_hash_slots[pos]!=0){size_t entry=basalt_hash_slots[pos];if(entry!=(size_t)-1&&basalt_live[entry-1]==p)return pos;pos=(pos+1)&(basalt_hash_cap-1);}return(size_t)-1;}\nstatic BASALT_UNUSED size_t basalt_find(void*p){size_t slot=basalt_hash_slot_for(p);if(slot==(size_t)-1)return(size_t)-1;return basalt_hash_slots[slot]-1;}\n");
+  write_string(out, "static BASALT_UNUSED void basalt_validate(void){size_t i;if(basalt_hash_cap==0&&basalt_live_n>0)basalt_panic(2);for(i=0;i<basalt_live_n;i++){if(!basalt_live[i]||basalt_find(basalt_live[i])!=i)basalt_panic(2);}}\n");
+  write_string(out, "static BASALT_UNUSED void basalt_cleanup(void){size_t i;basalt_validate();for(i=0;i<basalt_live_n;i++)free(basalt_live[i]);free(basalt_live);free(basalt_hash_slots);basalt_live=NULL;basalt_hash_slots=NULL;basalt_live_n=basalt_live_cap=basalt_hash_cap=basalt_hash_tombstones=0;}\n");
+  write_string(out, "static BASALT_UNUSED void* basalt_track(void*p){size_t c;void**q;if(!p)return NULL;if(basalt_find(p)!=(size_t)-1)basalt_panic(2);basalt_hash_ensure();if(basalt_live_n==basalt_live_cap){if(basalt_live_cap>(size_t)-1/2)c=(size_t)-1;else c=basalt_live_cap?basalt_live_cap*2:32;if(c>(size_t)-1/sizeof(void*))basalt_panic(2);q=(void**)realloc(basalt_live,c*sizeof(void*));if(!q)basalt_panic(2);basalt_live=q;basalt_live_cap=c;}basalt_live[basalt_live_n]=p;basalt_hash_insert_index(basalt_live_n);basalt_live_n++;atexit(basalt_cleanup);return p;}\n");
+  write_string(out, "static BASALT_UNUSED void basalt_release(void*p){size_t i,slot,last;void*moved;if(!p)return;i=basalt_find(p);if(i==(size_t)-1)basalt_panic(2);slot=basalt_hash_slot_for(p);if(slot==(size_t)-1)basalt_panic(2);basalt_hash_slots[slot]=(size_t)-1;basalt_hash_tombstones++;free(p);last=--basalt_live_n;if(i!=last){moved=basalt_live[last];basalt_live[i]=moved;slot=basalt_hash_slot_for(moved);if(slot==(size_t)-1)basalt_panic(2);basalt_hash_slots[slot]=i+1;}if(basalt_hash_tombstones>basalt_hash_cap/4)basalt_hash_rebuild(basalt_live_n);}\nstatic BASALT_UNUSED void basalt_rebind_index(size_t index,size_t slot,void*next){if(next==NULL)basalt_panic(2);if(index>=basalt_live_n||slot>=basalt_hash_cap||basalt_hash_slots[slot]!=(index+1))basalt_panic(2);if(basalt_live[index]==next)return;if(basalt_find(next)!=(size_t)-1)basalt_panic(2);basalt_hash_slots[slot]=(size_t)-1;basalt_hash_tombstones++;basalt_live[index]=next;basalt_hash_ensure();basalt_hash_insert_index(index);}\n");
   write_string(out, "static int basalt_io_status=0;\n");
   write_string(out, "static BASALT_UNUSED int runtime_io_status(void){return basalt_io_status;}\n");
   write_string(out, "static BASALT_UNUSED char* runtime_read_line(int max_len){size_t n=0;int c=EOF;char*p;if(max_len<2||max_len>1048576)basalt_panic(7);p=(char*)malloc((size_t)max_len);if(!p)basalt_panic(5);while(n+1<(size_t)max_len){c=fgetc(stdin);if(c==EOF)break;if(c=='\\n')break;p[n++]=(char)c;}p[n]=0;if(c!=EOF&&c!='\\n'&&n+1==(size_t)max_len){basalt_io_status=3;do{c=fgetc(stdin);}while(c!=EOF&&c!='\\n');}else if(c==EOF&&n==0)basalt_io_status=1;else basalt_io_status=0;return(char*)basalt_track(p);}\n");
@@ -8426,8 +8516,8 @@ func emit_runtime(out: int*): void {
   write_string(out, "static BASALT_UNUSED void runtime_write_char(char value){if(fputc((unsigned char)value,stdout)==EOF||fflush(stdout)!=0)basalt_panic(8);}\n");
   write_string(out, "static BASALT_UNUSED void* basalt_memory_alloc(int count,size_t elem_size){size_t bytes=basalt_checked_bytes(count,elem_size);void*p=calloc(1,bytes?bytes:1);if(!p)basalt_panic(5);return basalt_track(p);}\n");
   write_string(out, "static BASALT_UNUSED void* basalt_memory_alloc_aligned(int count,int alignment,size_t elem_size){size_t bytes,rounded,a;void*p;if(count<0||alignment<1)basalt_panic(1);a=(size_t)alignment;if((a&(a-1))!=0)basalt_panic(1);if(a<sizeof(void*))a=sizeof(void*);bytes=basalt_checked_bytes(count,elem_size);if(bytes==0)bytes=1;if(bytes>(size_t)-1-(a-1))basalt_panic(1);rounded=(bytes+a-1)&~(a-1);p=aligned_alloc(a,rounded);if(!p)basalt_panic(5);return basalt_track(p);}\n");
-  write_string(out, "static BASALT_UNUSED void* basalt_memory_resize(void* old,int old_count,int new_count,size_t elem_size){size_t slot=(size_t)-1;size_t old_bytes;size_t new_bytes;void*p;if(old_count<0||new_count<0||new_count<old_count)basalt_panic(1);if(old){slot=basalt_find(old);if(slot==(size_t)-1)basalt_panic(2);}old_bytes=basalt_checked_bytes(old_count,elem_size);new_bytes=basalt_checked_bytes(new_count,elem_size);p=realloc(old,new_bytes?new_bytes:1);if(!p)basalt_panic(6);if(slot==(size_t)-1)basalt_track(p);else basalt_live[slot]=p;if(new_bytes>old_bytes)memset((char*)p+old_bytes,0,new_bytes-old_bytes);return p;}\n");
-  write_string(out, "static BASALT_UNUSED void basalt_memory_free(void*p){basalt_release(p);}\n");
+  write_string(out, "static BASALT_UNUSED void* basalt_memory_resize(void*old,int old_count,int new_count,size_t elem_size){size_t index=(size_t)-1;size_t slot=(size_t)-1;size_t old_bytes;size_t new_bytes;void*p;if(old_count<0||new_count<0||new_count<old_count)basalt_panic(1);if(old){index=basalt_find(old);slot=basalt_hash_slot_for(old);if(index==(size_t)-1||slot==(size_t)-1)basalt_panic(2);}old_bytes=basalt_checked_bytes(old_count,elem_size);new_bytes=basalt_checked_bytes(new_count,elem_size);p=realloc(old,new_bytes?new_bytes:1);if(!p)basalt_panic(6);if(old)basalt_rebind_index(index,slot,p);else basalt_track(p);if(new_bytes>old_bytes)memset((char*)p+old_bytes,0,new_bytes-old_bytes);return p;}\n");
+  write_string(out, "static BASALT_UNUSED void basalt_memory_free(void*p){basalt_release(p);}\ntypedef struct basalt_arena_block { void*data; struct basalt_arena_block*next; } basalt_arena_block;\ntypedef struct basalt_arena { basalt_arena_block*head; struct basalt_arena*parent; struct basalt_arena*child_head; struct basalt_arena*next_sibling; struct basalt_arena*prev_sibling; int closed; } basalt_arena;\nstatic BASALT_UNUSED void* basalt_arena_make(void){basalt_arena*a=(basalt_arena*)calloc(1,sizeof(*a));if(!a)basalt_panic(5);return basalt_track(a);}\nstatic BASALT_UNUSED void* basalt_arena_child(void*raw){basalt_arena*parent;basalt_arena*child;if(!raw||basalt_find(raw)==(size_t)-1)basalt_panic(2);parent=(basalt_arena*)raw;if(parent->closed)basalt_panic(4);child=(basalt_arena*)calloc(1,sizeof(*child));if(!child)basalt_panic(5);child->parent=parent;child->next_sibling=parent->child_head;if(parent->child_head)parent->child_head->prev_sibling=child;parent->child_head=child;return basalt_track(child);}\nstatic BASALT_UNUSED void* basalt_arena_alloc(void*raw,int count,size_t elem_size){basalt_arena*a;basalt_arena_block*b;void*p;size_t bytes;if(!raw||basalt_find(raw)==(size_t)-1)basalt_panic(2);a=(basalt_arena*)raw;if(a->closed)basalt_panic(4);bytes=basalt_checked_bytes(count,elem_size);p=calloc(1,bytes?bytes:1);if(!p)basalt_panic(5);b=(basalt_arena_block*)calloc(1,sizeof(*b));if(!b){free(p);basalt_panic(5);}p=basalt_track(p);b->data=p;b->next=a->head;b=(basalt_arena_block*)basalt_track(b);a->head=b;return p;}\nstatic BASALT_UNUSED void basalt_arena_free(void*raw){basalt_arena*a;basalt_arena_block*b;basalt_arena_block*next;if(!raw||basalt_find(raw)==(size_t)-1)basalt_panic(2);a=(basalt_arena*)raw;if(a->closed)basalt_panic(2);a->closed=1;while(a->child_head)basalt_arena_free(a->child_head);b=a->head;while(b){next=b->next;basalt_release(b->data);basalt_release(b);b=next;}a->head=NULL;if(a->parent){if(a->prev_sibling)a->prev_sibling->next_sibling=a->next_sibling;else a->parent->child_head=a->next_sibling;if(a->next_sibling)a->next_sibling->prev_sibling=a->prev_sibling;a->parent=NULL;a->next_sibling=NULL;a->prev_sibling=NULL;}basalt_release(a);}\n");
   write_string(out, "static BASALT_UNUSED char* runtime_string_concat(const char* a,const char* b){size_t na,nb,total;char* p;if(!a||!b)basalt_panic(4);na=strlen(a);nb=strlen(b);if(na>(size_t)-1-nb-1)basalt_panic(1);total=na+nb+1;p=(char*)malloc(total);if(!p)basalt_panic(5);memcpy(p,a,na);memcpy(p+na,b,nb);p[na+nb]=0;return(char*)basalt_track(p);}\n");
   write_string(out, "static char* basalt_sys_out=NULL;static char* basalt_sys_err=NULL;static int basalt_sys_status_value=0;static int basalt_sys_ok_value=0;static int basalt_sys_truncated_value=0;static int basalt_sys_spawn_error_value=0;static int basalt_sys_cleanup_registered=0;static void basalt_sys_free_buffers(void){if(basalt_sys_out){free(basalt_sys_out);basalt_sys_out=NULL;}if(basalt_sys_err){free(basalt_sys_err);basalt_sys_err=NULL;}}\n");
   write_string(out, "static BASALT_UNUSED char* basalt_sys_empty(void){char*p=(char*)malloc(1);if(!p)basalt_panic(5);p[0]=0;return(char*)basalt_track(p);}\n");
@@ -8447,7 +8537,7 @@ func emit_runtime(out: int*): void {
   write_string(out, "int basalt_compile_argv(const char*cc,const char*input_c,const char*output_bin,char**all,int start,int extra_count){char**av;int i,status;if(!cc||!input_c||!output_bin||!all||start<0||extra_count<0)return -1;av=(char**)calloc((size_t)extra_count+4,sizeof(char*));if(!av)basalt_panic(5);for(i=0;i<extra_count;i++)av[i]=all[start+i];av[extra_count]=(char*)input_c;av[extra_count+1]=(char*)\"-o\";av[extra_count+2]=(char*)output_bin;av[extra_count+3]=NULL;status=basalt_sys_run(cc,av,extra_count+3,65536);if(status!=0&&basalt_sys_stderr()[0]!=0)fputs(basalt_sys_stderr(),stderr);free(av);return status;}\n");
   write_string(out, "static BASALT_UNUSED int* alloc_ints(int n){int* p;if(n<0)basalt_panic(1);if(n<1)n=1;basalt_checked_bytes(n,sizeof(int));p=(int*)calloc((size_t)n,sizeof(int));if(!p)basalt_panic(5);return(int*)basalt_track(p);}\n");
   write_string(out, "static BASALT_UNUSED void free_ints(int* p){basalt_release(p);}\n");
-  write_string(out, "static BASALT_UNUSED int* grow_ints(int* p,int old,int n){size_t slot=(size_t)-1;int* q;if(old<0||n<0)basalt_panic(1);if(n<=old)return p;if(p){slot=basalt_find(p);if(slot==(size_t)-1)basalt_panic(2);}basalt_checked_bytes(n,sizeof(int));q=(int*)realloc(p,(size_t)n*sizeof(int));if(!q)basalt_panic(6);if(p)basalt_live[slot]=q;else basalt_track(q);memset(q+old,0,(size_t)(n-old)*sizeof(int));return q;}\n");
+  write_string(out, "static BASALT_UNUSED int* grow_ints(int*p,int old,int n){size_t index=(size_t)-1;size_t slot=(size_t)-1;int*q;if(old<0||n<0)basalt_panic(1);if(n<=old)return p;if(p){index=basalt_find(p);slot=basalt_hash_slot_for(p);if(index==(size_t)-1||slot==(size_t)-1)basalt_panic(2);}basalt_checked_bytes(n,sizeof(int));q=(int*)realloc(p,(size_t)n*sizeof(int));if(!q)basalt_panic(6);if(p)basalt_rebind_index(index,slot,q);else basalt_track(q);memset(q+old,0,(size_t)(n-old)*sizeof(int));return q;}\n");
   write_string(out, "extern int* payload_int; extern int* payload_name; extern int* payload_string;\n");
   write_string(out, "extern int* code_kind; extern int* code_value; extern int* input_kind; extern int* input_value;\n");
   write_string(out, "extern int* source; extern int* sym_start; extern int* sym_len; extern int* sym_hash; extern int* sym_kind; extern int* sym_type; extern int* sym_scope;\n\n");

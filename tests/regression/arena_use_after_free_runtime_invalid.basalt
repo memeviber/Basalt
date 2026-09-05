@@ -1,0 +1,10 @@
+include "../../src/stdlib/arena.basalt"
+
+func main(): int {
+  let arena: arena::Arena = arena::new();
+  arena = arena::free(arena);
+  let zero: int = 0;
+  let value: int* = arena::alloc(arena, 1, zero);
+  if value == 0 then return 1;
+  return 0;
+}
