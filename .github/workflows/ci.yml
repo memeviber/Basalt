@@ -103,6 +103,62 @@ jobs:
             exit 1
           fi
 
+  valgrind-memcheck:
+    name: Valgrind Memcheck
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install toolchain and Valgrind
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang clang-format gcc valgrind
+
+      - name: Generate representative C fixtures
+        run: |
+          set -euo pipefail
+          root="$PWD"
+          out="$root/.tmp/ci-valgrind"
+          mkdir -p "$out"
+          strict=(
+            -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror
+          )
+          source scripts/bootstrap_stage.sh
+          boot_bin=$(bootstrap_stage "$root" "$out/bootstrap-stage" "${strict[@]}")
+
+          for fixture in \
+            arena_cycle_test \
+            arena_nested_parent_child_test \
+            arena_cycle_stress_test \
+            arena_leak_probe_test \
+            ownership_valid \
+            generic_callback_borrow_lifecycle_test
+          do
+            source_file="tests/regression/${fixture}.basalt"
+            generated="$out/${fixture}.c"
+            binary="$out/${fixture}.bin"
+            "$boot_bin" "$source_file" "$generated"
+            gcc "${strict[@]}" -O0 -g "$generated" -o "$binary"
+          done
+
+      - name: Run Valgrind Memcheck
+        run: |
+          set -euo pipefail
+          out="$PWD/.tmp/ci-valgrind"
+          for binary in "$out"/*.bin; do
+            echo "Memcheck: $(basename "$binary")"
+            valgrind \
+              --tool=memcheck \
+              --leak-check=full \
+              --show-leak-kinds=all \
+              --errors-for-leak-kinds=definite,indirect \
+              --track-origins=yes \
+              --undef-value-errors=yes \
+              --error-exitcode=42 \
+              "$binary"
+          done
+
   workflow-hygiene:
     name: Workflow and repository hygiene
     runs-on: ubuntu-24.04
