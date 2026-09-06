@@ -1,0 +1,119 @@
+name: Basalt CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: basalt-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bootstrap-gates:
+    name: Bootstrap regression and safety gates
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang clang-format gcc
+
+      - name: Run Bootstrap regression suite
+        run: bash scripts/run_regression.sh
+
+      - name: Run ownership, stress, and fixed-point gates
+        run: bash scripts/run_ownership_stress.sh
+
+      - name: Run FFI portability checks
+        run: bash scripts/run_ffi_portability.sh
+
+  generated-c-matrix:
+    name: Generated C - ${{ matrix.compiler }} / ${{ matrix.mode }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler:
+          - gcc
+          - clang
+        mode:
+          - strict
+          - sanitizers
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang clang-format gcc
+
+      - name: Generate and compile representative C fixtures
+        env:
+          CC: ${{ matrix.compiler }}
+        run: |
+          set -euo pipefail
+          root="$PWD"
+          out="$root/.tmp/ci-${CC}-${{ matrix.mode }}"
+          mkdir -p "$out"
+          strict=(
+            -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror
+          )
+          source scripts/bootstrap_stage.sh
+          boot_bin=$(bootstrap_stage "$root" "$out/bootstrap-stage" "${strict[@]}")
+
+          for fixture in \
+            arena_cycle_test \
+            arena_nested_parent_child_test \
+            arena_cycle_stress_test \
+            match_nested_constructor_defer_test \
+            defer_return_expression_order_test
+          do
+            source_file="tests/regression/${fixture}.basalt"
+            generated="$out/${fixture}.c"
+            binary="$out/${fixture}.bin"
+            "$boot_bin" "$source_file" "$generated"
+
+            if [ "${{ matrix.mode }}" = "strict" ]; then
+              "$CC" "${strict[@]}" "$generated" -o "$binary"
+              "$binary"
+            else
+              "$CC" "${strict[@]}" \
+                -fsanitize=address,undefined -fno-omit-frame-pointer \
+                "$generated" -o "$binary"
+              ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
+              UBSAN_OPTIONS=halt_on_error=1 \
+                "$binary"
+            fi
+          done
+
+      - name: Verify generated artifacts stay out of the repository
+        run: |
+          if find tests -type f -print0 | xargs -0 file 2>/dev/null | grep -F 'ELF '; then
+            echo 'Generated executable found under tests/' >&2
+            exit 1
+          fi
+
+  workflow-hygiene:
+    name: Workflow and repository hygiene
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Validate shell scripts and whitespace
+        run: |
+          set -euo pipefail
+          git diff --check
+          bash -n scripts/*.sh
+          test -f src/bootstrap/basaltc.seed.c
+          test -f src/bootstrap/fixed_point_production.sha256
