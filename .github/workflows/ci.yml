@@ -30,6 +30,9 @@ jobs:
       - name: Run Bootstrap regression suite
         run: bash scripts/run_regression.sh
 
+      - name: Run diagnostic contract checks
+        run: bash scripts/run_diagnostic_contract.sh
+
       - name: Run ownership, stress, and fixed-point gates
         run: bash scripts/run_ownership_stress.sh
 

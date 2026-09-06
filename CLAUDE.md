@@ -17,6 +17,7 @@ Every task should be handled as a reproducible engineering change rather than as
 | Compiler implementation | `src/bootstrap/basaltc.basalt` | Focused reproducer and fresh Bootstrap build | Source change, semantic reason, and observed behavior. |
 | Frozen compiler state | `src/bootstrap/basaltc.seed.c` and its SHA-256 file | Checksum comparison and fixed-point verification | Whether the seed is unchanged, promoted, or intentionally pending. |
 | Language behavior | Positive and negative fixtures under `tests/` | Bootstrap compile result, diagnostic code, generated C, and runtime result where applicable | Whether behavior is valid, rejected, conservative, unsupported, or a confirmed bug. |
+| Language and diagnostics | `docs/spec/` | Specification review and diagnostic-contract harness | Which language rules, diagnostic fields, and compatibility codes are covered. |
 | Generated C | Bootstrap output | Strict GCC/Clang compilation and sanitizer execution when relevant | Whether the generated translation unit is portable and memory-safe for the tested case. |
 | Documentation and diagrams | `CLAUDE.md` and `docs/architecture/` | Source-anchor or repository-state check | Which implementation facts are documented and which boundaries remain selected or omitted. |
 
@@ -87,7 +88,7 @@ Only intentional source, test, harness, or documentation files should be staged.
 
 ## Bug-audit protocol
 
-A suspicious output is not automatically a compiler bug. A disciplined audit must separate source validity, language policy, missing features, runtime safety behavior, and proven miscompilation.
+A suspicious output is not automatically a compiler bug. A disciplined audit must separate source validity, language policy, missing features, runtime safety behavior, and proven miscompilation. The compatibility baseline is [`docs/spec/basalt-language-spec.md`](docs/spec/basalt-language-spec.md), and the structured diagnostic contract is [`docs/spec/diagnostics.md`](docs/spec/diagnostics.md).
 
 | Classification | Evidence required | Correct response |
 |---|---|---|
@@ -97,7 +98,7 @@ A suspicious output is not automatically a compiler bug. A disciplined audit mus
 | Feature gap | The behavior is not defined or implemented by the current language. | Record the gap separately from a bug and add a design decision before implementing it. |
 | Runtime safety abort | Compilation succeeds but the generated runtime intentionally stops on a contract violation, such as releasing an untracked pointer. | Verify the exit code and sanitizer result; do not label the behavior a compiler miscompile without a contrary language requirement. |
 
-The minimum reproduction record should contain the input fixture, compiler command, diagnostic or runtime result, generated-C fragment, host compiler result, sanitizer result when relevant, and the classification rationale. A source-looking output is not sufficient evidence by itself.
+The minimum reproduction record should contain the input fixture, compiler command, diagnostic or runtime result, generated-C fragment, host compiler result, sanitizer result when relevant, and the classification rationale. A source-looking output is not sufficient evidence by itself. Structured diagnostic changes must also update `scripts/run_diagnostic_contract.sh` and the diagnostic specification.
 
 ## Parser and AST contracts
 
@@ -194,3 +195,5 @@ Before declaring a Bootstrap compiler task complete, verify all applicable items
 [4]: docs/architecture/bootstrap-function-reference.md "Selected Bootstrap function reference"
 [5]: docs/architecture/bootstrap-function-graph.mmd "Selected Bootstrap function graph"
 [6]: src/stdlib/arena.basalt "Explicit arena lifetime for cyclic pointer graphs"
+[7]: docs/spec/basalt-language-spec.md "Basalt language compatibility specification"
+[8]: docs/spec/diagnostics.md "Basalt structured diagnostic contract"
