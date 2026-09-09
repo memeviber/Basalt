@@ -1,0 +1,14 @@
+func make_generic<T>(value: T): closure(): T {
+  return fn[borrow value](): T {
+    return value;
+  };
+}
+
+func main(): void {
+  let escaped: closure(): int = make_generic(7);
+  print (escaped)();
+}
+// diagnostic.code: 60
+// diagnostic.hint: keep a borrowed capture within the source binding's lexical lifetime
+// diagnostic.excerpt: return value;
+// end

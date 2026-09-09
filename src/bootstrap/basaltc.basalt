@@ -6613,20 +6613,21 @@ func tc_check_closure_escape(id: int): void {
   let cap: int = node_a[id];
   while cap != 0 {
     if node_aux[cap] != 1 then {
-      if node_c[cap] < tc_global_count then { } else if node_c[cap] < tc_var_count && tc_var_param[node_c[cap]] == 1 then { } else tc_fail(60);
+      if node_c[cap] < tc_global_count then { } else tc_fail(60);
     }
     cap = node_next[cap];
   }
 }
 func tc_check_closure_value_escape(id: int): void {
   if id == 0 then return;
+  if node_kind[id] == N_MOVE then { tc_check_closure_value_escape(node_a[id]); return; }
   if node_kind[id] == N_CLOSURE then { tc_check_closure_escape(id); return; }
   if node_kind[id] == N_VAR then {
     if tc_lookup_var(node_value[id]) == 1 then {
       let cap: int = tc_var_closure_caps[tc_last_var_index];
       while cap != 0 {
         if node_aux[cap] != 1 then {
-      if node_c[cap] < tc_global_count then { } else if node_c[cap] < tc_var_count && tc_var_param[node_c[cap]] == 1 then { } else tc_fail(60);
+      if node_c[cap] < tc_global_count then { } else tc_fail(60);
     }
         cap = node_next[cap];
       }
@@ -7808,7 +7809,8 @@ func tc_stmt(id: int, expected_kind: int, expected_name: int): void {
   else if k == N_EXPR then { tc_expr(node_a[id]); if node_kind[node_a[id]] == N_CALL then tc_consume_call(node_a[id]); }
   else if k == N_RETURN then {
     if node_a[id] == 0 then { if expected_kind != TY_VOID then tc_fail(22); }
-    else { tc_mark_float_expr(node_a[id], expected_kind); tc_expr(node_a[id]); let return_borrow: int = tc_expr_borrow_source; if tc_literal_fits(node_a[id], expected_kind) == 0 then tc_fail(54); if expected_kind == TY_PTR then { if node_kind[node_a[id]] == N_ADDRESS then tc_check_explicit_return_address_escape(return_borrow); else tc_check_return_escape(return_borrow); } if expected_kind == TY_CLOSURE then tc_check_closure_value_escape(node_a[id]); if tc_same_full(expected_kind, expected_name, tc_expected_elem_kind, tc_expected_elem_name, tc_kind, tc_name, tc_elem_kind, tc_elem_name) == 0 then if tc_integer_literal_conversion(node_a[id], expected_kind, tc_kind) == 0 && node_kind[node_a[id]] != N_NULL then tc_fail_types(23, expected_kind, tc_kind); }
+    else { tc_mark_float_expr(node_a[id], expected_kind); tc_expr(node_a[id]); let return_borrow: int = tc_expr_borrow_source; if tc_literal_fits(node_a[id], expected_kind) == 0 then tc_fail(54); if expected_kind == TY_PTR then { if node_kind[node_a[id]] == N_ADDRESS then tc_check_explicit_return_address_escape(return_borrow); else tc_check_return_escape(return_borrow); } if expected_kind == TY_CLOSURE || node_kind[node_a[id]] == N_CLOSURE || (node_kind[node_a[id]] == N_MOVE && node_kind[node_a[node_a[id]]] == N_CLOSURE) then tc_check_closure_value_escape(node_a[id]);
+ if tc_same_full(expected_kind, expected_name, tc_expected_elem_kind, tc_expected_elem_name, tc_kind, tc_name, tc_elem_kind, tc_elem_name) == 0 then if tc_integer_literal_conversion(node_a[id], expected_kind, tc_kind) == 0 && node_kind[node_a[id]] != N_NULL then tc_fail_types(23, expected_kind, tc_kind); }
   } else if k == N_BREAK || k == N_CONTINUE then { if tc_loop_depth == 0 then tc_fail(24);   } else if k == N_BLOCK then {
     tc_enter_scope();
     let x: int = node_a[id]; while x != 0 { tc_stmt(x, expected_kind, expected_name); x = node_next[x]; }

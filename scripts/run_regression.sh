@@ -261,6 +261,8 @@ expect_reject "$ROOT/tests/regression/deprecated_result_option_invalid.basalt" d
 compile_run "$ROOT/tests/super/stdlib_matrix_valid.basalt" stdlib_matrix_valid
 compile_run "$ROOT/tests/super/integer_pointer_boundary_valid.basalt" integer_pointer_boundary_valid
 compile_run "$ROOT/tests/super/closure_generic_nested_valid.basalt" closure_generic_nested_valid
+compile_run "$ROOT/tests/super/closure_generic_higher_order_valid.basalt" closure_generic_higher_order_valid
+compile_run "$ROOT/tests/super/generic_closure_container_valid.basalt" generic_closure_container_valid
 compile_run_with_output "$ROOT/tests/super/print_stream_valid.basalt" print_stream_valid $'Basalt-2026\nline-two\n42\n'
 compile_run "$ROOT/tests/regression/string_builder_iter_test.basalt" string_builder_iter_test
 compile_run "$ROOT/tests/regression/stdlib_filesystem_path_string_test.basalt" stdlib_filesystem_path_string_test
@@ -325,6 +327,10 @@ expect_reject "$ROOT/tests/regression/tuple_binding_count_invalid.basalt" tuple_
 expect_reject "$ROOT/tests/regression/tagged_union_type_invalid.basalt" tagged_union_type_invalid
 expect_reject "$ROOT/tests/super/generic_element_mismatch_invalid.basalt" generic_element_mismatch_invalid
 expect_reject "$ROOT/tests/super/generic_callback_mismatch_invalid.basalt" generic_callback_mismatch_invalid
+expect_reject "$ROOT/tests/super/generic_closure_callback_mismatch_invalid.basalt" generic_closure_callback_mismatch_invalid
+grep -Fq 'diagnostic.code=20' "$OUT/generic_closure_callback_mismatch_invalid.boot.log"
+expect_reject "$ROOT/tests/super/generic_closure_escape_invalid.basalt" generic_closure_escape_invalid
+grep -Fq 'diagnostic.code=60' "$OUT/generic_closure_escape_invalid.boot.log"
 compile_run_with_input "$ROOT/tests/regression/io_safe_test.basalt" io_safe_test $'42\nbad-number\nBasalt-OVERFLOW\nok\n' $'safe-io\n42\nBasalt-\n'
 compile_run_with_input "$ROOT/tests/regression/io_safe_edge_test.basalt" io_safe_edge_test $'-17\n999999999999999999999999999999999999999999999\n' ''
 expect_runtime_failure_with_input "$ROOT/tests/regression/io_invalid_limit.basalt" io_invalid_limit '' 2

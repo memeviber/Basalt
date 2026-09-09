@@ -1,0 +1,22 @@
+func apply_borrowed<T>(value: T*, callback: fn(T): T): T {
+  let snapshot: T = *value;
+  return callback(snapshot);
+}
+
+func increment(value: int): int {
+  return value + 1;
+}
+
+func main(): void {
+  let value: int = 4;
+  let callback: fn(string): string = fn[](text: string): string {
+    return text;
+  };
+  let rejected: int = apply_borrowed(&value, callback);
+  print rejected;
+}
+// diagnostic.code: 20
+// diagnostic.expected: function
+// diagnostic.found: unknown type
+// diagnostic.hint: make the initializer expression match the declared type
+// end

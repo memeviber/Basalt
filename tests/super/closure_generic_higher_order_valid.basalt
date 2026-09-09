@@ -1,0 +1,44 @@
+func apply_twice<T>(value: T, callback: fn(T): T): T {
+  let first: T = callback(value);
+  return callback(first);
+}
+
+func apply_borrowed<T>(value: T*, callback: fn(T): T): T {
+  let snapshot: T = *value;
+  return callback(snapshot);
+}
+
+func add_one(value: int): int {
+  return value + 1;
+}
+
+func scale_f32(value: f32): f32 {
+  return value + 0.5;
+}
+
+func main(): int {
+  let offset: int = 3;
+  let nested: closure(int): int = fn[borrow offset](value: int): int {
+    let inner: closure(int): int = fn[borrow offset](nested_value: int): int {
+      return nested_value + offset;
+    };
+    return (inner)(value);
+  };
+  if (nested)(4) != 7 then return 1;
+
+  let generic_int: int = apply_twice(10, &add_one);
+  if generic_int != 12 then return 2;
+
+  let amount: f32 = 1.0;
+  let generic_float: f32 = apply_twice(amount, &scale_f32);
+  if generic_float < 1.99 || generic_float > 2.01 then return 3;
+
+  let borrowed_value: int = 20;
+  let borrowed_result: int = apply_borrowed(&borrowed_value, &add_one);
+  if borrowed_result != 21 then return 4;
+
+  return 0;
+}
+// Exercises nested borrowed captures and generic callback substitution for int and f32.
+// diagnostic: valid
+// end

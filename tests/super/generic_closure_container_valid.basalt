@@ -1,0 +1,36 @@
+include "../../src/stdlib/array.basalt"
+
+func map_one<T>(values: array::Array<T>, callback: fn(T): T, zero: T): array::Array<T> {
+  let length: int = array::len(values);
+  let output: array::Array<T> = array::new(0, zero);
+  let index: int = 0;
+  while index < length {
+    let item: T = array::get(values, index);
+    output = array::push(output, callback(item), zero);
+    index = index + 1;
+  }
+  return output;
+}
+
+func increment(value: int): int {
+  return value + 1;
+}
+
+func add_two(value: int): int {
+  return value + 2;
+}
+
+func main(): int {
+  let values: array::Array<int> = array::new(0, 0);
+  let first: array::Array<int> = array::push(values, 4, 0);
+  let second: array::Array<int> = array::push(first, 8, 0);
+  let mapped: array::Array<int> = map_one(second, &add_two, 0);
+  if array::get(mapped, 0) != 6 then return 1;
+  if array::get(mapped, 1) != 10 then return 2;
+  let freed: array::Array<int> = array::free(mapped);
+  if array::len(freed) != 0 then return 3;
+  return 0;
+}
+// Exercises a generic container callback with a borrowed closure capture.
+// diagnostic: valid
+// end

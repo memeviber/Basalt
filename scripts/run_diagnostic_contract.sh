@@ -64,4 +64,19 @@ expect_diagnostic \
   'diagnostic.code=15' \
   'diagnostic.excerpt=  if !"invalid" then return 1;'
 
+expect_diagnostic \
+  "$ROOT/tests/super/generic_closure_callback_mismatch_invalid.basalt" \
+  generic_closure_callback_mismatch \
+  'diagnostic.code=20' \
+  'diagnostic.expected=function' \
+  'diagnostic.found=unknown type' \
+  'diagnostic.hint=make the initializer expression match the declared type'
+
+expect_diagnostic \
+  "$ROOT/tests/super/generic_closure_escape_invalid.basalt" \
+  generic_closure_escape \
+  'diagnostic.code=60' \
+  "diagnostic.hint=keep a borrowed capture within the source binding's lexical lifetime" \
+  'diagnostic.excerpt=    return value;'
+
 printf '%s\n' 'Diagnostic contract checks completed successfully.'
