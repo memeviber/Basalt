@@ -68,8 +68,8 @@ expect_diagnostic \
   "$ROOT/tests/super/generic_closure_callback_mismatch_invalid.basalt" \
   generic_closure_callback_mismatch \
   'diagnostic.code=20' \
-  'diagnostic.expected=function' \
-  'diagnostic.found=unknown type' \
+  'diagnostic.expected=fn(string): string' \
+  'diagnostic.found=closure(string): string' \
   'diagnostic.hint=make the initializer expression match the declared type'
 
 expect_diagnostic \

@@ -5050,6 +5050,11 @@ let tc_error_symbol: int = 0;
 let tc_error_pos: int = 0 - 1;
 let tc_error_expected_kind: int = 0;
 let tc_error_found_kind: int = 0;
+// Preserve the complete type shape for diagnostics.  The kind fields remain
+// as a compatibility fallback, while these nodes retain function/closure
+// signatures through generic unification and initializer checking.
+let tc_error_expected_type: int = 0;
+let tc_error_found_type: int = 0;
 let tc_name: int = 0;
 let tc_kind: int = 0;
 let tc_elem_kind: int = 0;
@@ -5458,6 +5463,18 @@ func tc_fail_types(code: int, expected_kind: int, found_kind: int): void {
   if tc_ok == 1 then {
     tc_error_expected_kind = expected_kind;
     tc_error_found_kind = found_kind;
+    tc_error_expected_type = 0;
+    tc_error_found_type = 0;
+  }
+  tc_fail(code);
+}
+
+func tc_fail_type_nodes(code: int, expected_type: int, found_type: int): void {
+  if tc_ok == 1 then {
+    tc_error_expected_type = expected_type;
+    tc_error_found_type = found_type;
+    if expected_type != 0 then tc_error_expected_kind = node_kind[expected_type]; else tc_error_expected_kind = 0;
+    if found_type != 0 then tc_error_found_kind = node_kind[found_type]; else tc_error_found_kind = 0;
   }
   tc_fail(code);
 }
@@ -5730,14 +5747,14 @@ func tc_match_generic(formal: int, actual: int): void {
   if node_kind[formal] == TY_GENERIC then {
     tc_check_type(formal);
     tc_check_type(actual);
-    if node_kind[actual] != TY_GENERIC || node_value[formal] != node_value[actual] then { tc_fail_types(12, node_kind[formal], node_kind[actual]); return; }
+    if node_kind[actual] != TY_GENERIC || node_value[formal] != node_value[actual] then { tc_fail_type_nodes(12, formal, actual); return; }
     let f: int = node_a[formal]; let a: int = node_a[actual];
     while f != 0 && a != 0 { tc_match_generic(f, a); f = node_next[f]; a = node_next[a]; }
     if f != 0 || a != 0 then tc_fail(13);
     return;
   }
   if node_kind[formal] == TY_TUPLE then {
-    if node_kind[actual] != TY_TUPLE then { tc_fail_types(12, node_kind[formal], node_kind[actual]); return; }
+    if node_kind[actual] != TY_TUPLE then { tc_fail_type_nodes(12, formal, actual); return; }
     let f: int = node_a[formal]; let a: int = node_a[actual];
     while f != 0 && a != 0 { tc_match_generic(f, a); f = node_next[f]; a = node_next[a]; }
     if f != 0 || a != 0 then tc_fail(13);
@@ -5758,7 +5775,7 @@ func tc_match_generic(formal: int, actual: int): void {
   }
   if node_kind[formal] == TY_DYN_ARRAY && node_kind[actual] == TY_DYN_ARRAY then { tc_match_generic(node_a[formal], node_a[actual]); return; }
   tc_type_node(formal);
-  if tc_type_equal(formal, actual) == 0 then tc_fail_types(12, node_kind[formal], node_kind[actual]);
+  if tc_type_equal(formal, actual) == 0 then tc_fail_type_nodes(12, formal, actual);
 }
 
 func tc_substitute_type(ty: int): int {
@@ -7303,7 +7320,7 @@ func tc_expr(id: int): void {
       if ak == TY_FUN && pek == TY_FUN then {
         if actual_type == 0 then tc_fail_types(12, TY_FUN, 0);
         if formal_type == 0 then tc_fail_types(12, 0, TY_FUN);
-        if actual_type != 0 && formal_type != 0 && tc_type_equal(actual_type, formal_type) == 0 then tc_fail_types(12, node_kind[formal_type], node_kind[actual_type]);
+        if actual_type != 0 && formal_type != 0 && tc_type_equal(actual_type, formal_type) == 0 then tc_fail_type_nodes(12, formal_type, actual_type);
       }
       arg = node_next[arg]; p = node_next[p];
     }
@@ -7675,15 +7692,16 @@ func tc_stmt(id: int, expected_kind: int, expected_name: int): void {
     tc_var_fun_target[tc_last_var_index] = const_fun_target;
     tc_var_ffi_borrowed[tc_last_var_index] = const_ffi_borrowed;
   } else   if k == N_LET then {
-    tc_type_node(node_b[id]); let dk: int = tc_kind; let dn: int = tc_name; let de: int = tc_elem_kind; let den: int = tc_elem_name;
+    tc_type_node(node_b[id]); let declared_type_node: int = tc_result_type; let dk: int = tc_kind; let dn: int = tc_name; let de: int = tc_elem_kind; let den: int = tc_elem_name;
     tc_mark_float_expr(node_c[id], dk);
     tc_expr(node_c[id]);
+    let rhs_type_node: int = tc_result_type;
     let ek: int = tc_kind; let en: int = tc_name; let ee: int = tc_elem_kind; let een: int = tc_elem_name; let rhs_borrow: int = tc_expr_borrow_source; let rhs_borrow_origin: int = tc_expr_borrow_origin; let rhs_borrow_mut: int = tc_expr_borrow_mut; let rhs_borrow_param: int = tc_expr_borrow_param; let rhs_ffi_borrowed: int = tc_expr_ffi_borrowed; let rhs_fun_target: int = tc_expr_fun_target;
     if tc_is_owner_kind(dk) == 1 && node_kind[node_c[id]] == N_VAR then tc_fail(40);
 
     if tc_literal_fits(node_c[id], dk) == 0 then tc_fail(54);
     if tc_same_full(dk, dn, de, den, ek, en, ee, een) == 0 then {
-      if tc_integer_literal_conversion(node_c[id], dk, ek) == 0 && (node_kind[node_c[id]] != N_INT || node_value[node_c[id]] != 0) && node_kind[node_c[id]] != N_NULL then tc_fail_types(20, dk, ek);
+      if tc_integer_literal_conversion(node_c[id], dk, ek) == 0 && (node_kind[node_c[id]] != N_INT || node_value[node_c[id]] != 0) && node_kind[node_c[id]] != N_NULL then tc_fail_type_nodes(20, declared_type_node, rhs_type_node);
     }
     if dk == TY_DYN_ARRAY && node_kind[node_c[id]] == N_VAR then tc_move_value(node_c[id]);
     tc_add_var(node_a[id], dk, dn, de, den, node_b[id]);
@@ -7900,6 +7918,11 @@ func tc_print_source_excerpt(pos: int): void {
     i = i + 1;
   }
 }
+func tc_print_symbol_name(name: int): void {
+  if name == 0 || sym_len[name] <= 0 then { runtime_write_string("unknown"); return; }
+  let i: int = 0;
+  while i < sym_len[name] { tc_print_source_byte(source[sym_start[name] + i]); i = i + 1; }
+}
 func tc_print_type_kind(kind: int): void {
   if kind == TY_INT then runtime_write_string("int");
   else if kind == TY_BOOL then runtime_write_string("bool");
@@ -7913,6 +7936,7 @@ func tc_print_type_kind(kind: int): void {
   else if kind == TY_FLOAT then runtime_write_string("f32");
   else if kind == TY_DOUBLE then runtime_write_string("f64");
   else if kind == TY_FUN then runtime_write_string("function");
+  else if kind == TY_CLOSURE then runtime_write_string("closure");
   else if kind == TY_PARAM then runtime_write_string("type parameter");
   else if kind == TY_GENERIC then runtime_write_string("generic type");
   else if kind == TY_LONG then runtime_write_string("long");
@@ -7929,6 +7953,40 @@ func tc_print_type_kind(kind: int): void {
   else if kind == TY_USIZE then runtime_write_string("usize");
   else if kind == TY_TUPLE then runtime_write_string("tuple");
   else runtime_write_string("unknown type");
+}
+func tc_print_type(ty: int): void {
+  if ty == 0 then { runtime_write_string("unknown type"); return; }
+  let kind: int = node_kind[ty];
+  if kind == TY_PTR then {
+    tc_print_type(node_a[ty]); runtime_write_string("*"); return;
+  }
+  if kind == TY_ARRAY then {
+    tc_print_type(node_a[ty]); runtime_write_string("[]"); return;
+  }
+  if kind == TY_DYN_ARRAY then {
+    runtime_write_string("Array<"); tc_print_type(node_a[ty]); runtime_write_string(">"); return;
+  }
+  if kind == TY_NAMED then { tc_print_symbol_name(node_value[ty]); return; }
+  if kind == TY_PARAM then { tc_print_symbol_name(node_value[ty]); return; }
+  if kind == TY_GENERIC then {
+    tc_print_symbol_name(node_value[ty]); runtime_write_string("<");
+    let arg: int = node_a[ty]; let first: int = 1;
+    while arg != 0 { if first == 0 then runtime_write_string(", "); tc_print_type(arg); first = 0; arg = node_next[arg]; }
+    runtime_write_string(">"); return;
+  }
+  if kind == TY_TUPLE then {
+    runtime_write_string("(");
+    let item: int = node_a[ty]; let first_tuple: int = 1;
+    while item != 0 { if first_tuple == 0 then runtime_write_string(", "); tc_print_type(item); first_tuple = 0; item = node_next[item]; }
+    runtime_write_string(")"); return;
+  }
+  if kind == TY_FUN || kind == TY_CLOSURE then {
+    if kind == TY_FUN then runtime_write_string("fn("); else runtime_write_string("closure(");
+    let param: int = node_a[ty]; let first_param: int = 1;
+    while param != 0 { if first_param == 0 then runtime_write_string(", "); tc_print_type(param); first_param = 0; param = node_next[param]; }
+    runtime_write_string("): "); tc_print_type(node_b[ty]); return;
+  }
+  tc_print_type_kind(kind);
 }
 func tc_diag_has_types(code: int): int {
   if code == 12 then return 1;
@@ -8040,10 +8098,10 @@ func tc_diag(): void {
   runtime_write_char('\n');
   if tc_diag_has_types(tc_error_code) == 1 then {
     runtime_write_string("diagnostic.expected=");
-    tc_print_type_kind(tc_error_expected_kind);
+    if tc_error_expected_type != 0 then tc_print_type(tc_error_expected_type); else tc_print_type_kind(tc_error_expected_kind);
     runtime_write_char('\n');
     runtime_write_string("diagnostic.found=");
-    tc_print_type_kind(tc_error_found_kind);
+    if tc_error_found_type != 0 then tc_print_type(tc_error_found_type); else tc_print_type_kind(tc_error_found_kind);
     runtime_write_char('\n');
   }
   runtime_write_string("diagnostic.excerpt=");
@@ -8163,7 +8221,7 @@ func tc_check_ffi_return_type(ty: int): int {
   return tc_check_ffi_type(ty);
 }
 func tc_program(root: int): int {
-  tc_root = root; tc_ok = 1; tc_error_code = 0; tc_error_pos = 0 - 1; tc_error_expected_kind = 0; tc_error_found_kind = 0; tc_var_count = 0; tc_scope_count = 0; tc_path_count = 0; tc_loop_depth = 0; tc_flow_depth = 0; tc_flow_log_count = 0;
+  tc_root = root; tc_ok = 1; tc_error_code = 0; tc_error_pos = 0 - 1; tc_error_expected_kind = 0; tc_error_found_kind = 0; tc_error_expected_type = 0; tc_error_found_type = 0; tc_var_count = 0; tc_scope_count = 0; tc_path_count = 0; tc_loop_depth = 0; tc_flow_depth = 0; tc_flow_log_count = 0;
   tc_prepare_return_contracts(root);
   let collision_item: int = node_a[root];
   while collision_item != 0 {

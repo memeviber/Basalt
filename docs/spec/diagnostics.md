@@ -22,7 +22,7 @@ A compiler diagnostic uses one field per line. The current structured fields are
 | `diagnostic.target` | Include/import target for source-import failures. |
 | `diagnostic.excerpt` | Source-line excerpt associated with the reported position. |
 
-Not every diagnostic has every optional field. Type mismatch diagnostics include `expected` and `found` when the checker has both values. Include/import diagnostics include `target` when a target is available.
+Not every diagnostic has every optional field. Type mismatch diagnostics include `expected` and `found` when the checker has both values. These descriptions preserve the complete available type shape: function types use `fn(<parameters>): <return>`, closure types use `closure(<parameters>): <return>`, and nested pointer, tuple, array, generic, and named types are printed recursively. The printer must not collapse a known function or closure into a generic `function` or `unknown type` label. Include/import diagnostics include `target` when a target is available.
 
 ## Human-readable prefix
 
@@ -46,7 +46,7 @@ Positions are derived from the source byte offset stored by the parser and check
 
 ## Diagnostic lifecycle
 
-The type checker uses a first-error-wins policy. `tc_fail` records the first error code and source position while preserving the original failure when later checks encounter cascading errors. `tc_fail_types` additionally records expected and found type kinds before entering the same first-error path.
+The type checker uses a first-error-wins policy. `tc_fail` records the first error code and source position while preserving the original failure when later checks encounter cascading errors. `tc_fail_types` records kind-level fallback data, while node-aware type failures retain the expected and found type shapes before entering the same first-error path.
 
 This policy prevents a single malformed expression from producing a misleading list of secondary failures. A future multi-diagnostic mode must be designed separately and must not silently change the current single-diagnostic contract.
 

@@ -16,7 +16,7 @@ func main(): void {
   print rejected;
 }
 // diagnostic.code: 20
-// diagnostic.expected: function
-// diagnostic.found: unknown type
+// diagnostic.expected: fn(string): string
+// diagnostic.found: closure(string): string
 // diagnostic.hint: make the initializer expression match the declared type
 // end
