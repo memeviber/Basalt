@@ -1,0 +1,39 @@
+enum Event {
+  Empty,
+  Triple {
+    first: int;
+    second: int;
+    third: int;
+  },
+  Quad {
+    first: int;
+    second: int;
+    third: int;
+    fourth: int;
+  },
+};
+
+func score(event: Event): int {
+  match event {
+    Empty => {
+      return 0;
+    }
+    Triple(first, second, third) => {
+      return (first * 100) + (second * 10) + third;
+    }
+    Quad(first, second, third, fourth) => {
+      return (first * 1000) + (second * 100) + (third * 10) + fourth;
+    }
+  }
+  return 0;
+}
+
+func main(): int {
+  let triple: Event = Event::Triple(1, 2, 3);
+  if score(triple) != 123 then return 1;
+  let quad: Event = Event::Quad(4, 5, 6, 7);
+  if score(quad) != 4567 then return 2;
+  let empty: Event = Event::Empty();
+  if score(empty) != 0 then return 3;
+  return 0;
+}

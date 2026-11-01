@@ -289,6 +289,7 @@ compile_run "$ROOT/tests/regression/defer_return_expression_order_test.basalt" d
 expect_reject "$ROOT/tests/regression/defer_single_statement_invalid.basalt" defer_single_statement_invalid
 grep -Fq 'diagnostic.code=77' "$OUT/defer_single_statement_invalid.boot.log"
 compile_run "$ROOT/tests/regression/match_test.basalt" match_test
+compile_run "$ROOT/tests/regression/match_multi_payload_test.basalt" match_multi_payload_test
 compile_run "$ROOT/tests/regression/match_default_test.basalt" match_default_test
 compile_run "$ROOT/tests/regression/match_default_chain_test.basalt" match_default_chain_test
 compile_run "$ROOT/tests/regression/match_arm_defer_test.basalt" match_arm_defer_test

@@ -3383,13 +3383,12 @@ func ast_stmt(): int {
       if input_take(T_LPAREN) == 1 then {
         if is_default == 1 then return (0 - 1);
         if input_peek() != T_ID then return (0 - 1);
-        let binding_name: int = input_payload(); input_pos = input_pos + 1;
-        bindings = ast_node(N_VAR, 0, 0, 0, binding_name, 0);
-        if input_take(T_COMMA) == 1 then {
+        while 1 == 1 {
+          let binding_name: int = input_payload(); input_pos = input_pos + 1;
+          let binding: int = ast_node(N_VAR, 0, 0, 0, binding_name, 0);
+          if bindings == 0 then bindings = binding; else bindings = ast_link(bindings, binding);
+          if input_take(T_COMMA) == 0 then break;
           if input_peek() != T_ID then return (0 - 1);
-          let second_binding_name: int = input_payload(); input_pos = input_pos + 1;
-          let second_binding: int = ast_node(N_VAR, 0, 0, 0, second_binding_name, 0);
-          bindings = ast_link(bindings, second_binding);
         }
         if input_take(T_RPAREN) == 0 then return (0 - 1);
       }
