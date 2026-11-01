@@ -1,0 +1,27 @@
+include "../../src/stdlib/concurrency.basalt"
+
+func allocation_worker(argument: void*): int {
+  if argument != null then return 99;
+  let round: int = 0;
+  while round < 400 {
+    let first: int* = memory_alloc(1, round);
+    let second: int* = memory_alloc(2, round);
+    memory_free(first);
+    memory_free(second);
+    round = round + 1;
+  }
+  return 0;
+}
+
+func main(): int {
+  let first: void* = concurrency::thread_spawn(&allocation_worker, null);
+  let second: void* = concurrency::thread_spawn(&allocation_worker, null);
+  let third: void* = concurrency::thread_spawn(&allocation_worker, null);
+  let fourth: void* = concurrency::thread_spawn(&allocation_worker, null);
+  let status: int = 0;
+  if concurrency::thread_join(first) != 0 then status = 1;
+  if concurrency::thread_join(second) != 0 then status = 2;
+  if concurrency::thread_join(third) != 0 then status = 3;
+  if concurrency::thread_join(fourth) != 0 then status = 4;
+  return status;
+}

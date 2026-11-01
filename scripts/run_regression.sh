@@ -76,6 +76,18 @@ compile_run() {
   printf 'PASS %s\n' "$label"
 }
 
+compile_run_threaded() {
+  local source=$1 label=$2
+  track_source "$source"
+  local boot_c="$OUT/${label}.boot.c"
+  local boot_bin="$OUT/${label}.boot.bin"
+  rm -f "$boot_c" "$boot_bin" "$ROOT"/$(basename "$source").c
+  "$BOOT_BIN" "$source" "$boot_c" >/dev/null
+  gcc -pthread -std=c11 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror "$boot_c" -o "$boot_bin"
+  "$boot_bin"
+  printf 'PASS %s (threaded)\n' "$label"
+}
+
 compile_run_with_output() {
   local source=$1 label=$2 expected=$3
   track_source "$source"
@@ -282,6 +294,7 @@ compile_run "$ROOT/tests/regression/sys_process_portable_test.basalt" sys_proces
 check_windows_process_compile
 auto_compile_cli
 compile_run "$ROOT/tests/regression/tagged_union_test.basalt" tagged_union_test
+compile_run_threaded "$ROOT/tests/regression/runtime_tracker_race_test.basalt" runtime_tracker_race_test
 compile_run "$ROOT/tests/regression/defer_test.basalt" defer_test
 compile_run "$ROOT/tests/regression/defer_loop_control_test.basalt" defer_loop_control_test
 compile_run "$ROOT/tests/regression/defer_return_if_test.basalt" defer_return_if_test
