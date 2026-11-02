@@ -1368,7 +1368,9 @@ func gen_expr(id: int): void {
   let k: int = node_kind[id];
   if k == N_INT then {
     if node_aux[id] != 0 then {
-      if node_value[id] < 0 then code_emit(C_RAW_U64, node_aux[id]); else code_emit(C_RAW, node_aux[id]);
+      if node_c[id] == 1 && node_b[id] == 0 then code_emit(C_INT, node_value[id]);
+      else if node_c[id] == 1 then { code_emit(C_PUNCT, 4); code_emit(C_OP, OP_SUB); code_emit(C_PUNCT, 4); code_emit(C_KW, 28); code_emit(C_PUNCT, 5); code_emit(C_PUNCT, 4); code_emit(C_RAW_U64, node_aux[id]); code_emit(C_OP, OP_SUB); code_emit(C_INT, 1); code_emit(C_PUNCT, 5); code_emit(C_OP, OP_SUB); code_emit(C_INT, 1); code_emit(C_PUNCT, 5); }
+      else if node_value[id] < 0 then code_emit(C_RAW_U64, node_aux[id]); else code_emit(C_RAW, node_aux[id]);
     } else code_emit(C_INT, node_value[id]);
   }
   else if k == N_BOOL then code_emit(C_INT, node_value[id]);
@@ -2853,7 +2855,6 @@ func ast_const_mul_checked(left: int, right: int): int {
 func ast_const_eval(id: int): int {
   if id == 0 then return 0 - 1;
   if node_kind[id] == N_INT then {
-    if node_value[id] < 0 then return 0 - 1;
     return node_value[id];
   }
   if node_kind[id] == N_VAR then {
@@ -3186,6 +3187,16 @@ func ast_unary(): int {
   if input_take(T_MINUS) == 1 then {
     let e: int = ast_unary();
     if e < 0 then return (0 - 1);
+    if node_kind[e] == N_INT && node_c[e] == 0 then {
+      if node_value[e] >= 0 then node_value[e] = 0 - node_value[e]; else node_b[e] = 1;
+      node_c[e] = 1;
+      return e;
+    }
+    if node_kind[e] == N_INT && node_c[e] == 1 && node_b[e] == 0 then {
+      node_value[e] = 0 - node_value[e];
+      node_c[e] = 0;
+      return e;
+    }
     let zero: int = ast_node(N_INT, 0, 0, 0, 0, 0);
     return ast_node(N_BINOP, zero, e, 0, OP_SUB, 0);
   }
@@ -5601,8 +5612,18 @@ func tc_decimal_le(raw: int, limit: string): int {
   return 1;
 }
 
+func tc_signed_literal_fits(raw: int, target_kind: int): int {
+  if target_kind == TY_U8 || target_kind == TY_U16 || target_kind == TY_U32 || target_kind == TY_U64 || target_kind == TY_USIZE then return 0;
+  if target_kind == TY_I8 then return tc_decimal_le(raw, "128");
+  if target_kind == TY_I16 then return tc_decimal_le(raw, "32768");
+  if target_kind == TY_I32 || target_kind == TY_INT then return tc_decimal_le(raw, "2147483648");
+  if target_kind == TY_I64 || target_kind == TY_LONG || target_kind == TY_LLONG then return tc_decimal_le(raw, "9223372036854775808");
+  return 0;
+}
+
 func tc_literal_fits(id: int, target_kind: int): int {
   if id == 0 || node_kind[id] != N_INT || node_aux[id] == 0 then return 1;
+  if node_c[id] == 1 then return tc_signed_literal_fits(node_aux[id], target_kind);
   if target_kind == TY_INT then return tc_decimal_le(node_aux[id], "2147483647");
   if target_kind == TY_U8 then return tc_decimal_le(node_aux[id], "255");
   if target_kind == TY_U16 then return tc_decimal_le(node_aux[id], "65535");

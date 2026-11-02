@@ -324,9 +324,12 @@ compile_run "$ROOT/tests/regression/aligned_alloc_test.basalt" aligned_alloc_tes
 compile_run "$ROOT/tests/regression/fixed_width_integer_test.basalt" fixed_width_integer_test
 compile_run "$ROOT/tests/regression/integer_literal_boundary_test.basalt" integer_literal_boundary_test
 compile_run "$ROOT/tests/regression/integer_literal_usize_boundary_test.basalt" integer_literal_usize_boundary_test
+compile_run "$ROOT/tests/regression/negative_literal_test.basalt" negative_literal_test
 expect_reject "$ROOT/tests/regression/integer_literal_overflow_invalid.basalt" integer_literal_overflow_invalid
 expect_reject "$ROOT/tests/regression/integer_literal_u64_overflow_invalid.basalt" integer_literal_u64_overflow_invalid
 expect_reject "$ROOT/tests/regression/integer_literal_u8_overflow_invalid.basalt" integer_literal_u8_overflow_invalid
+expect_reject "$ROOT/tests/regression/negative_literal_overflow_invalid.basalt" negative_literal_overflow_invalid
+expect_reject "$ROOT/tests/regression/negative_fixed_width_overflow_invalid.basalt" negative_fixed_width_overflow_invalid
 expect_reject "$ROOT/tests/regression/integer_literal_global_invalid.basalt" integer_literal_global_invalid
 expect_reject "$ROOT/tests/regression/integer_literal_indirect_invalid.basalt" integer_literal_indirect_invalid
 expect_reject "$ROOT/tests/regression/f32_f64_mismatch_invalid.basalt" f32_f64_mismatch_invalid

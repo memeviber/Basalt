@@ -1,0 +1,17 @@
+func main(): int {
+  let small: int = -5;
+  let min_int: int = -2147483648;
+  let min_i8: i8 = -128;
+  let min_i16: i16 = -32768;
+  let min_i32: i32 = -2147483648;
+  let min_i64: i64 = -9223372036854775808;
+  let nested: int = --5;
+  if small != -5 then return 1;
+  if min_int != -2147483648 then return 2;
+  if min_i8 != -128 then return 3;
+  if min_i16 != -32768 then return 4;
+  if min_i32 != -2147483648 then return 5;
+  if min_i64 != -9223372036854775808 then return 6;
+  if nested != 5 then return 7;
+  return 0;
+}

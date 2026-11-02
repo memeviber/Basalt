@@ -45,7 +45,7 @@ The current type universe includes primitive scalar types, pointers, arrays, dyn
 
 Assignment, initialization, return, function arguments, array elements, and field writes are checked using the complete type shape. In particular, element types and nested pointer depth are not erased when comparing values.
 
-Numeric literal conversion is permitted only when the literal fits the target type and the conversion is part of the implemented type contract. An integer literal that exceeds the target representation is rejected at compile time.
+Numeric literal conversion is permitted only when the literal fits the target type and the conversion is part of the implemented type contract. A leading `-` applied directly to an integer literal is represented as a signed literal during parsing, rather than as a synthetic `0 - literal` binary expression. The magnitude is checked against the signed lower bound, so values such as `-2147483648`, `-128` for `i8`, and `-9223372036854775808` for `i64` are handled without intermediate positive overflow. An integer literal whose positive magnitude exceeds the applicable signed or unsigned representation is rejected at compile time.
 
 ## Expressions and evaluation order
 

@@ -1,0 +1,4 @@
+func main(): int {
+  let too_small: i8 = -129;
+  return too_small;
+}
